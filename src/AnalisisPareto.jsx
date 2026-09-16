@@ -35,7 +35,23 @@ const fasePorClase = {
 };
 
 const NAME_KEYS = ["partida", "descripcion", "descripción", "concepto", "item", "actividad"];
-const AMOUNT_KEYS = ["monto", "total", "precio", "costo", "importe", "subtotal"];
+const AMOUNT_KEYS_PRIORITY = ["total", "monto", "importe", "subtotal", "costo", "precio"];
+
+function findKeyIndex(headerRow, keys) {
+  for (let i = 0; i < headerRow.length; i++) {
+    const h = String(headerRow[i] || "").toLowerCase().trim();
+    if (keys.some((k) => h.includes(k))) return i;
+  }
+  return -1;
+}
+
+function findAmountIndex(headerRow) {
+  for (const keyword of AMOUNT_KEYS_PRIORITY) {
+    const idx = findKeyIndex(headerRow, [keyword]);
+    if (idx !== -1) return idx;
+  }
+  return -1;
+}
 
 const PHASE_KEYWORDS = [
   { phase: "Preliminares y movimiento de tierra", keywords: ["excavacion", "excavación", "movimiento de tierra", "demolicion", "demolición", "replanteo", "fundacion", "fundación", "cimentacion", "cimentación"] },
@@ -54,14 +70,6 @@ function classifyPhase(name) {
   return "Otras partidas";
 }
 
-function findKeyIndex(headerRow, keys) {
-  for (let i = 0; i < headerRow.length; i++) {
-    const h = String(headerRow[i] || "").toLowerCase().trim();
-    if (keys.some((k) => h.includes(k))) return i;
-  }
-  return -1;
-}
-
 export default function AnalisisPareto() {
   const [partidas, setPartidas] = useState(initialPartidas);
   const [umbralA, setUmbralA] = useState(80);
@@ -73,8 +81,6 @@ export default function AnalisisPareto() {
   const [topN, setTopN] = useState("todos");
   const [importError, setImportError] = useState("");
   const [importInfo, setImportInfo] = useState("");
-  const [exportError, setExportError] = useState("");
-  const [exporting, setExporting] = useState(false);
 
   const handleFile = (e) => {
     const file = e.target.files[0];
@@ -94,11 +100,11 @@ export default function AnalisisPareto() {
         }
         let headerRowIdx = 0;
         let nameIdx = findKeyIndex(rows[0], NAME_KEYS);
-        let amountIdx = findKeyIndex(rows[0], AMOUNT_KEYS);
+        let amountIdx = findAmountIndex(rows[0]);
         if (nameIdx === -1 || amountIdx === -1) {
-          for (let r = 0; r < Math.min(5, rows.length); r++) {
+          for (let r = 0; r < Math.min(20, rows.length); r++) {
             const ni = findKeyIndex(rows[r], NAME_KEYS);
-            const ai = findKeyIndex(rows[r], AMOUNT_KEYS);
+            const ai = findAmountIndex(rows[r]);
             if (ni !== -1 && ai !== -1) {
               headerRowIdx = r;
               nameIdx = ni;
@@ -272,8 +278,7 @@ export default function AnalisisPareto() {
 
   const picoFlujo = flujoCaja.length ? flujoCaja.reduce((max, f) => (f.monto > max.monto ? f : max), flujoCaja[0]) : null;
 
-  const handleExport = async () => {
-    setExportError("");
+  const handleExport = () => {
     const rows = analizadas.map((p) => ({
       Ranking: p.rank,
       Partida: p.name,
@@ -339,36 +344,12 @@ export default function AnalisisPareto() {
     wsCritica["!cols"] = [{ wch: 10 }, { wch: 40 }, { wch: 16 }, { wch: 32 }, { wch: 12 }];
     XLSX.utils.book_append_sheet(wb, wsCritica, "Actividades Criticas");
 
-    const fileName = "project-intelligence-report.xlsx";
-    setExporting(true);
-    try {
-      // Dentro de la página publicada (Artifact), la descarga directa al disco
-      // está bloqueada por el sandbox; se ofrece el archivo a través de la
-      // capacidad "downloads" del visor. Fuera de ese contexto (sitio propio
-      // desplegado en Vercel/Netlify), window.claude no existe y se usa la
-      // descarga normal del navegador.
-      const downloads = window.claude?.use ? await window.claude.use("downloads") : null;
-      if (downloads) {
-        const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-        const blob = new Blob([buffer], {
-          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        });
-        await downloads.save({ filename: fileName, data: blob });
-      } else {
-        XLSX.writeFile(wb, fileName);
-      }
-    } catch (err) {
-      if (err?.code !== "declined") {
-        setExportError("No se pudo generar la descarga. Intenta de nuevo.");
-      }
-    } finally {
-      setExporting(false);
-    }
+    XLSX.writeFile(wb, "project-intelligence-report.xlsx");
   };
 
   return (
     <div className="max-w-4xl mx-auto p-4 bg-white text-gray-900 font-sans text-sm">
-      <h1 className="text-lg font-semibold mb-1">Project Intelligence Report</h1>
+      <h1 className="text-lg font-semibold mb-1">Analiza tu presupuesto</h1>
       <p className="text-xs text-gray-500 mb-4">Herramienta complementaria de análisis para toma de decisiones — no reemplaza a Project, Primavera ni al software de presupuesto que ya usas.</p>
 
       {total > 0 && (
@@ -419,13 +400,12 @@ export default function AnalisisPareto() {
             <p className="text-xs text-gray-500">Total analizado</p>
             <p className="text-base font-medium">{fmt(total)}</p>
           </div>
-          <button onClick={handleExport} disabled={total === 0 || exporting}
+          <button onClick={handleExport} disabled={total === 0}
             className="text-xs border border-gray-300 rounded px-3 py-1.5 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed">
-            {exporting ? "Generando…" : "Descargar reporte completo (Excel)"}
+            Descargar reporte completo (Excel)
           </button>
         </div>
       </div>
-      {exportError && <p className="text-xs text-right mt-1" style={{ color: "#b91c1c" }}>{exportError}</p>}
 
       <div className="mb-4 border border-blue-200 rounded p-3 bg-blue-50">
         <div className="flex items-center justify-between mb-1">
