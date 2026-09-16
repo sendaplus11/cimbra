@@ -36,67 +36,66 @@ export default function App() {
         </div>
       </section>
 
-      {/* Qué es / Para quién / Qué problema resuelve */}
-      <section className="max-w-3xl mx-auto px-4 py-16 space-y-10">
-        <div>
-          <h2 className="text-xl font-semibold mb-3">Qué es</h2>
-          <p className="text-gray-700 leading-relaxed">
-            Cimbra es una herramienta de inteligencia de costos para presupuestos de construcción. Toma una
-            oferta o presupuesto ya elaborado (en Excel o exportado desde cualquier software de estimación)
-            y muestra automáticamente dónde está concentrado el valor económico del proyecto, para que el
-            profesional sepa por dónde empezar su revisión antes de comprometerse con una oferta o una
-            decisión.
-          </p>
-        </div>
-        <div>
-          <h2 className="text-xl font-semibold mb-3">Para quién</h2>
-          <p className="text-gray-700 leading-relaxed">
-            Contratistas, gerentes de construcción y consultores de proyecto, principalmente pequeñas y
-            medianas empresas que preparan sus propios presupuestos y cronogramas (a menudo en Excel, sin
-            Primavera ni MS Project) y participan en licitaciones públicas o privadas. Pensado primero para
-            el mercado de construcción en Venezuela, con visión de expandirse a otros países de la región y,
-            con el tiempo, a los sectores de petróleo y energía.
-          </p>
-        </div>
-        <div>
-          <h2 className="text-xl font-semibold mb-3">Qué problema resuelve</h2>
-          <p className="text-gray-700 leading-relaxed">
-            En un presupuesto de cientos de partidas, no todas pesan igual, pero el tiempo de revisión de un
-            profesional sí es limitado. Cimbra identifica qué partidas concentran la mayor parte del valor
-            económico (sus Cost Drivers), calcula cuánto se reduce el universo de revisión necesario (Review
-            Compression), y a partir de ahí ayuda a estimar un cronograma de obra y un flujo de caja del
-            proyecto, todo antes o durante la ejecución.
-          </p>
-        </div>
-      </section>
-
-      {/* Qué NO hace / Por qué es diferente */}
-      <section className="bg-gray-50 border-y border-gray-100">
-        <div className="max-w-3xl mx-auto px-4 py-16 space-y-10">
-          <div>
-            <h2 className="text-xl font-semibold mb-3">Qué NO hace</h2>
-            <p className="text-gray-700 leading-relaxed">
-              Cimbra no reemplaza el software de estimación de costos ni sus bases de precios (APU). No
-              reemplaza a Primavera ni a MS Project como motor de programación con dependencias y ruta
-              crítica. No le dice al profesional qué precio poner ni afirma que una partida esté mal
-              cotizada: identifica dónde está el impacto económico y deja el criterio final en manos del
-              profesional.
+      {/* Posicionamiento: todo en un solo bloque compacto */}
+      <section className="max-w-4xl mx-auto px-4 py-12">
+        <div className="bg-gray-50 border border-gray-100 rounded-xl p-6 md:p-8">
+          <div className="mb-6 pb-6 border-b border-gray-200">
+            <h2 className="text-lg font-semibold mb-2">Qué es</h2>
+            <p className="text-gray-700 text-sm leading-relaxed">
+              Cimbra es una herramienta de inteligencia de costos para presupuestos de construcción. Toma
+              una oferta o presupuesto ya elaborado (en Excel o exportado desde cualquier software de
+              estimación) y muestra automáticamente dónde está concentrado el valor económico del proyecto,
+              para que el profesional sepa por dónde empezar su revisión antes de comprometerse con una
+              oferta o una decisión.
             </p>
           </div>
-          <div>
-            <h2 className="text-xl font-semibold mb-3">Por qué es diferente</h2>
-            <p className="text-gray-700 leading-relaxed">
-              Cimbra no exige migrar a otra plataforma ni reconstruir el presupuesto desde cero: funciona
-              sobre lo que el profesional ya elaboró, sin importar en qué programa lo hizo. No compite con
-              los softwares de estimación ni con los sistemas de programación de obra; se coloca como una
-              capa de análisis independiente sobre lo que ya existe.
-            </p>
+
+          <div className="grid md:grid-cols-2 gap-x-8 gap-y-6">
+            <div>
+              <h2 className="text-base font-semibold mb-2">Para quién</h2>
+              <p className="text-gray-700 text-sm leading-relaxed">
+                Contratistas, gerentes de construcción y consultores de proyecto, principalmente pequeñas y
+                medianas empresas que preparan sus propios presupuestos y cronogramas (a menudo en Excel,
+                sin Primavera ni MS Project) y participan en licitaciones públicas o privadas. Pensado
+                primero para el mercado de construcción en Venezuela, con visión de expandirse a otros
+                países de la región y, con el tiempo, a los sectores de petróleo y energía.
+              </p>
+            </div>
+            <div>
+              <h2 className="text-base font-semibold mb-2">Qué problema resuelve</h2>
+              <p className="text-gray-700 text-sm leading-relaxed">
+                En un presupuesto de cientos de partidas, no todas pesan igual, pero el tiempo de revisión
+                de un profesional sí es limitado. Cimbra identifica qué partidas concentran la mayor parte
+                del valor económico (sus Cost Drivers), calcula cuánto se reduce el universo de revisión
+                necesario (Review Compression), y a partir de ahí ayuda a estimar un cronograma de obra y un
+                flujo de caja del proyecto, todo antes o durante la ejecución.
+              </p>
+            </div>
+            <div>
+              <h2 className="text-base font-semibold mb-2">Qué NO hace</h2>
+              <p className="text-gray-700 text-sm leading-relaxed">
+                Cimbra no reemplaza el software de estimación de costos ni sus bases de precios (APU). No
+                reemplaza a Primavera ni a MS Project como motor de programación con dependencias y ruta
+                crítica. No le dice al profesional qué precio poner ni afirma que una partida esté mal
+                cotizada: identifica dónde está el impacto económico y deja el criterio final en manos del
+                profesional.
+              </p>
+            </div>
+            <div>
+              <h2 className="text-base font-semibold mb-2">Por qué es diferente</h2>
+              <p className="text-gray-700 text-sm leading-relaxed">
+                Cimbra no exige migrar a otra plataforma ni reconstruir el presupuesto desde cero: funciona
+                sobre lo que el profesional ya elaboró, sin importar en qué programa lo hizo. No compite con
+                los softwares de estimación ni con los sistemas de programación de obra; se coloca como una
+                capa de análisis independiente sobre lo que ya existe.
+              </p>
+            </div>
           </div>
         </div>
       </section>
 
       {/* Caso de referencia */}
-      <section className="max-w-3xl mx-auto px-4 py-16">
+      <section className="max-w-3xl mx-auto px-4 py-10">
         <h2 className="text-xl font-semibold mb-3">Caso de referencia</h2>
         <p className="text-gray-700 leading-relaxed">
           En uno de los proyectos de mayor envergadura ejecutados por su fundador como Director de
