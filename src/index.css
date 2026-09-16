@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+}
+
+/* Textura sutil tipo "papel de plano" para el hero: una retícula fina que
+   remite a los planos de construcción, sin competir con el contenido. */
+.blueprint-grid {
+  background-image:
+    linear-gradient(rgba(28, 43, 57, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(28, 43, 57, 0.055) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
