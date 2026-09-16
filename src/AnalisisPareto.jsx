@@ -22,6 +22,18 @@ const initialPartidas = [
 
 const fmt = (n) => "$" + Math.round(n || 0).toLocaleString("en-US");
 
+function truncar(s, n = 70) {
+  const str = String(s || "");
+  return str.length > n ? str.slice(0, n).trim() + "…" : str;
+}
+
+function resumirNombres(items, max, formatFn) {
+  const fmtFn = formatFn || ((p) => truncar(p.name));
+  const mostrados = items.slice(0, max).map(fmtFn);
+  const resto = items.length - max;
+  return mostrados.join(" · ") + (resto > 0 ? " · y " + resto + " más" : "");
+}
+
 const claseInfo = {
   A: { color: "#b91c1c", bg: "#fee2e2", label: "Clase A — máximo impacto" },
   B: { color: "#92400e", bg: "#fef3c7", label: "Clase B — impacto medio" },
@@ -118,8 +130,6 @@ export default function AnalisisPareto() {
           return;
         }
         const nuevas = [];
-        let categoriaActual = null;
-        let categoriasDetectadas = 0;
         for (let r = headerRowIdx + 1; r < rows.length; r++) {
           const row = rows[r];
           if (!row) continue;
@@ -127,16 +137,8 @@ export default function AnalisisPareto() {
           const amountRaw = row[amountIdx];
           const amount = typeof amountRaw === "number" ? amountRaw : parseFloat(String(amountRaw || "").replace(/[^0-9.-]/g, ""));
           const nombreLimpio = name ? String(name).trim() : "";
-          if (nombreLimpio && (isNaN(amount) || amount <= 0)) {
-            // fila con texto pero sin monto: probablemente un encabezado de sección/categoría del propio archivo
-            if (nombreLimpio.length > 2) {
-              categoriaActual = nombreLimpio;
-              categoriasDetectadas++;
-            }
-            continue;
-          }
           if (nombreLimpio && !isNaN(amount) && amount > 0) {
-            nuevas.push({ id: newId(), name: nombreLimpio, monto: amount, categoria: categoriaActual });
+            nuevas.push({ id: newId(), name: nombreLimpio, monto: amount });
           }
         }
         if (nuevas.length === 0) {
@@ -144,11 +146,7 @@ export default function AnalisisPareto() {
           return;
         }
         setPartidas(nuevas);
-        const tieneCategoriasReales = nuevas.some((p) => p.categoria);
-        setImportInfo(
-          nuevas.length + " partidas importadas correctamente." +
-          (tieneCategoriasReales ? " Se detectaron " + categoriasDetectadas + " categorías propias del archivo y se usarán en Cost Analysis en lugar de una clasificación automática." : "")
-        );
+        setImportInfo(nuevas.length + " partidas importadas correctamente.");
       } catch (err) {
         setImportError("No se pudo leer el archivo. Verifica que sea un Excel o CSV válido.");
       }
@@ -196,20 +194,13 @@ export default function AnalisisPareto() {
   const reviewCompression = n80 > 0 ? analizadas.length / n80 : 0;
 
   const fasesMap = {};
-  const fasesAppearanceOrder = [];
-  const usaCategoriasReales = analizadas.some((p) => p.categoria);
   analizadas.forEach((p) => {
-    const ph = usaCategoriasReales ? (p.categoria || "Sin categoría en el archivo") : classifyPhase(p.name);
-    if (!fasesMap[ph]) {
-      fasesMap[ph] = { name: ph, monto: 0, partidas: [] };
-      fasesAppearanceOrder.push(ph);
-    }
+    const ph = classifyPhase(p.name);
+    if (!fasesMap[ph]) fasesMap[ph] = { name: ph, monto: 0, partidas: [] };
     fasesMap[ph].monto += p.monto;
     fasesMap[ph].partidas.push(p);
   });
-  const fasesOrdenadas = usaCategoriasReales
-    ? fasesAppearanceOrder.map((ph) => fasesMap[ph])
-    : PHASE_ORDER.filter((ph) => fasesMap[ph]).map((ph) => fasesMap[ph]);
+  const fasesOrdenadas = PHASE_ORDER.filter((ph) => fasesMap[ph]).map((ph) => fasesMap[ph]);
   let cursorDia = 0;
   const cronograma = fasesOrdenadas.map((f, i) => {
     const pct = total ? f.monto / total : 0;
@@ -263,7 +254,7 @@ export default function AnalisisPareto() {
   const esLargoPlazo = (name) => LONG_LEAD_KEYWORDS.some((k) => String(name).toLowerCase().includes(k));
 
   const analizadasConFase = analizadas.map((p) => {
-    const fase = usaCategoriasReales ? (p.categoria || "Sin categoría en el archivo") : classifyPhase(p.name);
+    const fase = classifyPhase(p.name);
     const inicioFase = faseInicioMap[fase] ?? 0;
     const urgencia = plazoTotal ? 1 - inicioFase / plazoTotal : 0;
     const criticidad = p.pctInd * 0.7 + urgencia * 100 * 0.3;
@@ -367,9 +358,7 @@ export default function AnalisisPareto() {
 
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mt-2">Bloque de pre-oferta — para usar antes de presentar la propuesta</p>
       <h2 className="text-base font-semibold mt-2 mb-1">1. 💰 Cost Analysis</h2>
-      <p className="text-xs text-gray-400 mb-2">
-        {usaCategoriasReales ? "Categorías tomadas directamente del archivo importado." : "Categorías estimadas por palabras clave (el archivo no traía categorías propias)."}
-      </p>
+      <p className="text-xs text-gray-400 mb-2">Categorías estimadas por palabras clave a partir del nombre de cada partida.</p>
       <div className="mb-6 border border-gray-200 rounded p-3">
         {costoPorFase.map((f) => (
           <div key={f.name} className="flex items-center gap-3 mb-2 text-xs">
@@ -509,7 +498,7 @@ export default function AnalisisPareto() {
                   Vale la pena que reflexiones si alguna de estas partidas corresponde a un insumo importado, de fabricación especializada o de entrega larga: al concentrar tanto peso, cualquier riesgo cambiario o de suministro en ellas afecta de forma desproporcionada al resto de la oferta.
                 </p>
               )}
-              <p className="text-xs text-gray-500">{porClase[c].map((p) => p.name).join(" · ")}</p>
+              <p className="text-xs text-gray-500">{resumirNombres(porClase[c], 8)}</p>
             </div>
           )
         )}
@@ -570,7 +559,7 @@ export default function AnalisisPareto() {
                     </span>
                   </div>
                   <p className="text-xs text-gray-500">
-                    {f.partidas.map((p) => p.name + (p.clase === "A" ? " (prioridad alta)" : "")).join(" · ")}
+                    {resumirNombres(f.partidas, 8, (p) => truncar(p.name) + (p.clase === "A" ? " (prioridad alta)" : ""))}
                   </p>
                 </div>
               ))}
@@ -617,7 +606,7 @@ export default function AnalisisPareto() {
         {prioridadesCompra.length === 0 && <p className="text-xs text-gray-400 italic">No se detectaron partidas de compra crítica con la información actual.</p>}
         {prioridadesCompra.map((p, i) => (
           <div key={p.id} className="flex items-center justify-between text-xs mb-1.5 border-b border-gray-100 pb-1.5">
-            <span>{i + 1}. {p.name}</span>
+            <span>{i + 1}. {truncar(p.name, 90)}</span>
             <span className="text-gray-500">Necesario desde día {p.inicioFase} · fase {p.fase} · clase {p.clase}</span>
           </div>
         ))}
@@ -631,7 +620,7 @@ export default function AnalisisPareto() {
         </p>
         {actividadesCriticas.map((p, i) => (
           <div key={p.id} className="flex items-center justify-between text-xs mb-1.5 border-b border-gray-100 pb-1.5">
-            <span>{i + 1}. {p.name}</span>
+            <span>{i + 1}. {truncar(p.name, 90)}</span>
             <span className="text-gray-500">{p.pctInd.toFixed(1)}% del presupuesto · fase {p.fase} · día {p.inicioFase}</span>
           </div>
         ))}
@@ -642,11 +631,11 @@ export default function AnalisisPareto() {
         <p className="text-sm text-gray-800 leading-relaxed">
           El presupuesto analizado asciende a {fmt(total)}, distribuido en {analizadas.length} partidas y {cronograma.length} fases constructivas, con un plazo estimado de {plazoTotal} días.
           {" "}Este presupuesto tiene un Review Compression de {reviewCompression.toFixed(1)}×: {n80} partidas ({pct80DePartidas.toFixed(0)}%) explican el 80% del valor total.
-          {" "}{porClase.A.length} partidas de clase A concentran la mayor parte del impacto financiero y deben revisarse con prioridad, siendo "{analizadas.find(p=>p.clase==="A")?.name || "—"}" la de mayor peso individual.
+          {" "}{porClase.A.length} partidas de clase A concentran la mayor parte del impacto financiero y deben revisarse con prioridad, siendo "{truncar(analizadas.find(p=>p.clase==="A")?.name, 60) || "—"}" la de mayor peso individual.
           {" "}La fase de mayor costo es "{costoPorFase[0]?.name}" con {costoPorFase[0] ? (costoPorFase[0].pct*100).toFixed(0) : 0}% del presupuesto.
           {" "}El período de mayor exigencia de flujo de caja es {picoFlujo?.periodo || "—"}, con un desembolso estimado de {picoFlujo ? fmt(picoFlujo.monto) : "$0"}.
-          {" "}{prioridadesCompra.length > 0 && <>La primera orden de compra a colocar es "{prioridadesCompra[0].name}", requerida desde el día {prioridadesCompra[0].inicioFase}. </>}
-          La actividad más crítica para dar seguimiento cercano es "{actividadesCriticas[0]?.name || "—"}".
+          {" "}{prioridadesCompra.length > 0 && <>La primera orden de compra a colocar es "{truncar(prioridadesCompra[0].name, 60)}", requerida desde el día {prioridadesCompra[0].inicioFase}. </>}
+          La actividad más crítica para dar seguimiento cercano es "{truncar(actividadesCriticas[0]?.name, 60) || "—"}".
         </p>
       </div>
     </div>
