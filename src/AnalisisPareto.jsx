@@ -85,7 +85,7 @@ export default function AnalisisPareto() {
   const [periodicidad, setPeriodicidad] = useState("mensual");
   const [inicioManual, setInicioManual] = useState({});
   const [duracionManual, setDuracionManual] = useState({});
-  const [topN, setTopN] = useState("80");
+  const [topN, setTopN] = useState("umbral");
   const [importError, setImportError] = useState("");
   const [importInfo, setImportInfo] = useState("");
 
@@ -132,6 +132,8 @@ export default function AnalisisPareto() {
           if (CODE_KEYS.some((k) => h.includes(k))) { codigoIdx = i; break; }
         }
         const nuevas = [];
+        let categoriaActual = null;
+        let categoriasDetectadas = 0;
         for (let r = headerRowIdx + 1; r < rows.length; r++) {
           const row = rows[r];
           if (!row) continue;
@@ -139,9 +141,17 @@ export default function AnalisisPareto() {
           const amountRaw = row[amountIdx];
           const amount = typeof amountRaw === "number" ? amountRaw : parseFloat(String(amountRaw || "").replace(/[^0-9.-]/g, ""));
           const nombreLimpio = name ? String(name).trim() : "";
+          if (nombreLimpio && (isNaN(amount) || amount <= 0)) {
+            const restoVacio = row.every((celda, idx) => idx === nameIdx || celda === undefined || celda === null || String(celda).trim() === "");
+            if (restoVacio && nombreLimpio.length > 2) {
+              categoriaActual = nombreLimpio;
+              categoriasDetectadas++;
+            }
+            continue;
+          }
           const codigo = codigoIdx !== -1 && row[codigoIdx] ? String(row[codigoIdx]).trim() : null;
           if (nombreLimpio && !isNaN(amount) && amount > 0) {
-            nuevas.push({ id: newId(), name: nombreLimpio, monto: amount, codigo });
+            nuevas.push({ id: newId(), name: nombreLimpio, monto: amount, codigo, categoria: categoriaActual });
           }
         }
         if (nuevas.length === 0) {
@@ -149,7 +159,11 @@ export default function AnalisisPareto() {
           return;
         }
         setPartidas(nuevas);
-        setImportInfo(nuevas.length + " partidas importadas correctamente.");
+        const tieneCategoriasReales = nuevas.some((p) => p.categoria);
+        setImportInfo(
+          nuevas.length + " partidas importadas correctamente." +
+          (tieneCategoriasReales ? " Se detectaron " + categoriasDetectadas + " capítulos propios del archivo y se usarán en Cost Analysis." : "")
+        );
       } catch (err) {
         setImportError("No se pudo leer el archivo. Verifica que sea un Excel o CSV válido.");
       }
@@ -191,20 +205,28 @@ export default function AnalisisPareto() {
   const n80 = encontrarN(80);
   const n90 = encontrarN(90);
   const n95 = encontrarN(95);
+  const nUmbralA = encontrarN(umbralA);
   const pct80DePartidas = analizadas.length ? (n80 / analizadas.length) * 100 : 0;
   const reviewCompression = n80 > 0 ? analizadas.length / n80 : 0;
 
-  const partidasMostradas = topN === "todos" ? analizadas : analizadas.slice(0, topN === "80" ? n80 : topN === "90" ? n90 : n95);
+  const partidasMostradas = topN === "todos" ? analizadas : analizadas.slice(0, nUmbralA);
   const pctCubierto = partidasMostradas.length ? partidasMostradas[partidasMostradas.length - 1].pctAcum : 0;
 
   const fasesMap = {};
+  const fasesAppearanceOrder = [];
+  const usaCategoriasReales = analizadas.some((p) => p.categoria);
   analizadas.forEach((p) => {
-    const ph = classifyPhase(p.name);
-    if (!fasesMap[ph]) fasesMap[ph] = { name: ph, monto: 0, partidas: [] };
+    const ph = usaCategoriasReales ? (p.categoria || "Sin categoría en el archivo") : classifyPhase(p.name);
+    if (!fasesMap[ph]) {
+      fasesMap[ph] = { name: ph, monto: 0, partidas: [] };
+      fasesAppearanceOrder.push(ph);
+    }
     fasesMap[ph].monto += p.monto;
     fasesMap[ph].partidas.push(p);
   });
-  const fasesOrdenadas = PHASE_ORDER.filter((ph) => fasesMap[ph]).map((ph) => fasesMap[ph]);
+  const fasesOrdenadas = usaCategoriasReales
+    ? fasesAppearanceOrder.map((ph) => fasesMap[ph])
+    : PHASE_ORDER.filter((ph) => fasesMap[ph]).map((ph) => fasesMap[ph]);
   let cursorDia = 0;
   const cronograma = fasesOrdenadas.map((f, i) => {
     const pct = total ? f.monto / total : 0;
@@ -258,7 +280,7 @@ export default function AnalisisPareto() {
   const esLargoPlazo = (name) => LONG_LEAD_KEYWORDS.some((k) => String(name).toLowerCase().includes(k));
 
   const analizadasConFase = analizadas.map((p) => {
-    const fase = classifyPhase(p.name);
+    const fase = usaCategoriasReales ? (p.categoria || "Sin categoría en el archivo") : classifyPhase(p.name);
     const inicioFase = faseInicioMap[fase] ?? 0;
     const urgencia = plazoTotal ? 1 - inicioFase / plazoTotal : 0;
     const criticidad = p.pctInd * 0.7 + urgencia * 100 * 0.3;
@@ -362,7 +384,9 @@ export default function AnalisisPareto() {
 
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mt-2">Bloque de pre-oferta — para usar antes de presentar la propuesta</p>
       <h2 className="text-base font-semibold mt-2 mb-1">1. 💰 Cost Analysis</h2>
-      <p className="text-xs text-gray-400 mb-2">Categorías estimadas por palabras clave a partir del nombre de cada partida.</p>
+      <p className="text-xs text-gray-400 mb-2">
+        {usaCategoriasReales ? "Capítulos tomados directamente del archivo importado." : "Categorías estimadas por palabras clave (el archivo no traía capítulos propios detectables)."}
+      </p>
       <div className="mb-6 border border-gray-200 rounded p-3">
         {costoPorFase.length === 0 && <p className="text-xs text-gray-400 italic">Sube un presupuesto o agrega partidas para ver la distribución por categoría.</p>}
         {costoPorFase.map((f) => (
@@ -458,9 +482,7 @@ export default function AnalisisPareto() {
           <div className="flex items-center gap-2 text-xs">
             <label className="text-gray-500">Mostrar</label>
             <select className="border border-gray-200 rounded px-1 py-0.5" value={topN} onChange={(e) => setTopN(e.target.value)}>
-              <option value="80">Hasta 80% del valor ({n80})</option>
-              <option value="90">Hasta 90% del valor ({n90})</option>
-              <option value="95">Hasta 95% del valor ({n95})</option>
+              <option value="umbral">Vista de trabajo — umbral clase A ({nUmbralA})</option>
               <option value="todos">Todas ({analizadas.length})</option>
             </select>
           </div>
@@ -505,7 +527,7 @@ export default function AnalisisPareto() {
       </div>
 
       <div className="mb-6">
-        {(topN === "80" ? ["A"] : topN === "90" ? ["A", "B"] : ["A", "B", "C"]).map((c) =>
+        {(topN === "umbral" ? ["A"] : ["A", "B", "C"]).map((c) =>
           porClase[c].length === 0 ? null : (
             <div key={c} className="mb-3 border border-gray-200 rounded p-3">
               <div className="flex items-center gap-2 mb-1">
