@@ -5,20 +5,7 @@ import * as XLSX from "xlsx";
 let idCounter = 1;
 const newId = () => idCounter++;
 
-const initialPartidas = [
-  { id: newId(), name: "Transformador de subestación", monto: 9800 },
-  { id: newId(), name: "Tubería de acero API 5L", monto: 4600 },
-  { id: newId(), name: "Concreto armado (losa y columnas)", monto: 3900 },
-  { id: newId(), name: "Pavimento asfáltico", monto: 2600 },
-  { id: newId(), name: "Cableado eléctrico media tensión", monto: 2300 },
-  { id: newId(), name: "Estructura metálica galpón", monto: 1900 },
-  { id: newId(), name: "Movimiento de tierra", monto: 1200 },
-  { id: newId(), name: "Tablero eléctrico", monto: 1100 },
-  { id: newId(), name: "Instalaciones sanitarias", monto: 950 },
-  { id: newId(), name: "Acabados y pintura", monto: 750 },
-  { id: newId(), name: "Cerramiento y señalización", monto: 700 },
-  { id: newId(), name: "Documentación técnica", monto: 400 },
-];
+const initialPartidas = [];
 
 const fmt = (n) => "$" + Math.round(n || 0).toLocaleString("en-US");
 
@@ -28,7 +15,7 @@ function truncar(s, n = 70) {
 }
 
 function resumirNombres(items, max, formatFn) {
-  const fmtFn = formatFn || ((p) => truncar(p.name));
+  const fmtFn = formatFn || ((p) => (p.codigo ? p.codigo + " " : "") + encabezado(p.name));
   const mostrados = items.slice(0, max).map(fmtFn);
   const resto = items.length - max;
   return mostrados.join(" · ") + (resto > 0 ? " · y " + resto + " más" : "");
@@ -47,7 +34,15 @@ const fasePorClase = {
 };
 
 const NAME_KEYS = ["partida", "descripcion", "descripción", "concepto", "item", "actividad"];
+const CODE_KEYS = ["codigo", "código", "cod.", "cod ", "nº", "no.", "n°"];
 const AMOUNT_KEYS_PRIORITY = ["total", "monto", "importe", "subtotal", "costo", "precio"];
+
+function encabezado(s, maxFallback = 55) {
+  const str = String(s || "").trim();
+  const corte = str.indexOf(".");
+  if (corte > 5 && corte < 120) return str.slice(0, corte);
+  return truncar(str, maxFallback);
+}
 
 function findKeyIndex(headerRow, keys) {
   for (let i = 0; i < headerRow.length; i++) {
@@ -90,7 +85,7 @@ export default function AnalisisPareto() {
   const [periodicidad, setPeriodicidad] = useState("mensual");
   const [inicioManual, setInicioManual] = useState({});
   const [duracionManual, setDuracionManual] = useState({});
-  const [topN, setTopN] = useState("todos");
+  const [topN, setTopN] = useState("80");
   const [importError, setImportError] = useState("");
   const [importInfo, setImportInfo] = useState("");
 
@@ -129,6 +124,13 @@ export default function AnalisisPareto() {
           setImportError("No se detectaron columnas de partida y monto. Verifica los encabezados del archivo.");
           return;
         }
+        let codigoIdx = -1;
+        const headerRow = rows[headerRowIdx];
+        for (let i = 0; i < headerRow.length; i++) {
+          if (i === nameIdx || i === amountIdx) continue;
+          const h = String(headerRow[i] || "").toLowerCase().trim();
+          if (CODE_KEYS.some((k) => h.includes(k))) { codigoIdx = i; break; }
+        }
         const nuevas = [];
         for (let r = headerRowIdx + 1; r < rows.length; r++) {
           const row = rows[r];
@@ -137,8 +139,9 @@ export default function AnalisisPareto() {
           const amountRaw = row[amountIdx];
           const amount = typeof amountRaw === "number" ? amountRaw : parseFloat(String(amountRaw || "").replace(/[^0-9.-]/g, ""));
           const nombreLimpio = name ? String(name).trim() : "";
+          const codigo = codigoIdx !== -1 && row[codigoIdx] ? String(row[codigoIdx]).trim() : null;
           if (nombreLimpio && !isNaN(amount) && amount > 0) {
-            nuevas.push({ id: newId(), name: nombreLimpio, monto: amount });
+            nuevas.push({ id: newId(), name: nombreLimpio, monto: amount, codigo });
           }
         }
         if (nuevas.length === 0) {
@@ -172,10 +175,11 @@ export default function AnalisisPareto() {
     const pctInd = total ? (p.monto / total) * 100 : 0;
     const pctAcum = total ? (acumulado / total) * 100 : 0;
     const clase = pctAcum <= umbralA ? "A" : pctAcum <= umbralB ? "B" : "C";
-    return { ...p, rank: i + 1, pctInd, pctAcum, clase };
+    const nombreCorto = (p.codigo ? p.codigo + " " : "") + encabezado(p.name, 26);
+    return { ...p, rank: i + 1, pctInd, pctAcum, clase, nombreCorto };
   });
 
-  const partidasMostradas = topN === "todos" ? analizadas : analizadas.slice(0, Number(topN));
+  const partidasMostradas = topN === "todos" ? analizadas : analizadas.slice(0, topN === "80" ? n80 : topN === "90" ? n90 : n95);
   const pctCubierto = partidasMostradas.length ? partidasMostradas[partidasMostradas.length - 1].pctAcum : 0;
 
   const porClase = { A: [], B: [], C: [] };
@@ -360,6 +364,7 @@ export default function AnalisisPareto() {
       <h2 className="text-base font-semibold mt-2 mb-1">1. 💰 Cost Analysis</h2>
       <p className="text-xs text-gray-400 mb-2">Categorías estimadas por palabras clave a partir del nombre de cada partida.</p>
       <div className="mb-6 border border-gray-200 rounded p-3">
+        {costoPorFase.length === 0 && <p className="text-xs text-gray-400 italic">Sube un presupuesto o agrega partidas para ver la distribución por categoría.</p>}
         {costoPorFase.map((f) => (
           <div key={f.name} className="flex items-center gap-3 mb-2 text-xs">
             <span className="w-52 truncate">{f.name}</span>
@@ -416,38 +421,46 @@ export default function AnalisisPareto() {
       </div>
 
       <div className="mb-6 border border-gray-200 rounded p-2">
-        <div className="flex items-center gap-4 px-2 pt-1 pb-2 text-xs text-gray-500">
-          <span className="flex items-center gap-1"><span style={{ width: 10, height: 10, background: claseInfo.A.color, display: "inline-block", borderRadius: 2 }}></span>Clase A</span>
-          <span className="flex items-center gap-1"><span style={{ width: 10, height: 10, background: claseInfo.B.color, display: "inline-block", borderRadius: 2 }}></span>Clase B</span>
-          <span className="flex items-center gap-1"><span style={{ width: 10, height: 10, background: claseInfo.C.color, display: "inline-block", borderRadius: 2 }}></span>Clase C</span>
-          <span className="ml-auto">Línea: % acumulado</span>
-        </div>
-        <ResponsiveContainer width="100%" height={280}>
-          <ComposedChart data={analizadas} margin={{ top: 10, right: 20, left: 0, bottom: 40 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-            <XAxis dataKey="name" angle={-35} textAnchor="end" interval={0} height={70} tick={{ fontSize: 10 }} />
-            <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
-            <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 11 }} />
-            <Tooltip formatter={(v, n) => (n === "pctAcum" ? v.toFixed(1) + "%" : fmt(v))} />
-            <ReferenceLine yAxisId="right" y={umbralA} stroke="#b91c1c" strokeDasharray="4 4" />
-            <Bar yAxisId="left" dataKey="monto">
-              {analizadas.map((p) => (
-                <Cell key={p.id} fill={claseInfo[p.clase].color} />
-              ))}
-            </Bar>
-            <Line yAxisId="right" dataKey="pctAcum" stroke="#111827" strokeWidth={2} dot={{ r: 3 }} />
-          </ComposedChart>
-        </ResponsiveContainer>
+        {analizadas.length === 0 ? (
+          <p className="text-sm text-gray-400 italic text-center py-16">Sube un presupuesto o agrega partidas manualmente para ver el análisis.</p>
+        ) : (
+          <>
+            <div className="flex items-center gap-4 px-2 pt-1 pb-2 text-xs text-gray-500">
+              <span className="flex items-center gap-1"><span style={{ width: 10, height: 10, background: claseInfo.A.color, display: "inline-block", borderRadius: 2 }}></span>Clase A</span>
+              <span className="flex items-center gap-1"><span style={{ width: 10, height: 10, background: claseInfo.B.color, display: "inline-block", borderRadius: 2 }}></span>Clase B</span>
+              <span className="flex items-center gap-1"><span style={{ width: 10, height: 10, background: claseInfo.C.color, display: "inline-block", borderRadius: 2 }}></span>Clase C</span>
+              <span className="ml-auto">Mostrando {partidasMostradas.length} de {analizadas.length} · Línea: % acumulado</span>
+            </div>
+            <ResponsiveContainer width="100%" height={280}>
+              <ComposedChart data={partidasMostradas} margin={{ top: 10, right: 20, left: 0, bottom: 40 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="nombreCorto" angle={-35} textAnchor="end" interval={0} height={70} tick={{ fontSize: 10 }} />
+                <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
+                <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(v, n) => (n === "pctAcum" ? v.toFixed(1) + "%" : fmt(v))} />
+                <ReferenceLine yAxisId="right" y={umbralA} stroke="#b91c1c" strokeDasharray="4 4" />
+                <Bar yAxisId="left" dataKey="monto">
+                  {partidasMostradas.map((p) => (
+                    <Cell key={p.id} fill={claseInfo[p.clase].color} />
+                  ))}
+                </Bar>
+                <Line yAxisId="right" dataKey="pctAcum" stroke="#111827" strokeWidth={2} dot={{ r: 3 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </>
+        )}
       </div>
 
       <div className="mb-3">
+        {analizadas.length > 0 && (
+        <>
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2 text-xs">
             <label className="text-gray-500">Mostrar</label>
             <select className="border border-gray-200 rounded px-1 py-0.5" value={topN} onChange={(e) => setTopN(e.target.value)}>
-              <option value="10">Top 10</option>
-              <option value="20">Top 20</option>
-              <option value="50">Top 50</option>
+              <option value="80">Hasta 80% del valor ({n80})</option>
+              <option value="90">Hasta 90% del valor ({n90})</option>
+              <option value="95">Hasta 95% del valor ({n95})</option>
               <option value="todos">Todas ({analizadas.length})</option>
             </select>
           </div>
@@ -465,8 +478,12 @@ export default function AnalisisPareto() {
         {partidasMostradas.map((p) => (
           <div key={p.id} className="grid grid-cols-12 gap-2 items-center text-xs py-1 border-b border-gray-100">
             <span className="col-span-1 text-gray-400">{p.rank}</span>
-            <input className="col-span-4 border-none bg-transparent focus:outline-none focus:bg-gray-50 rounded px-1"
-              value={p.name} onChange={(e) => updatePartida(p.id, "name", e.target.value)} />
+            <div className="col-span-4 flex items-baseline gap-1.5 min-w-0">
+              {p.codigo && <span className="font-mono text-[11px] text-gray-400 shrink-0">{p.codigo}</span>}
+              <input className="border-none bg-transparent focus:outline-none focus:bg-gray-50 rounded px-1 min-w-0 flex-1"
+                title={p.name}
+                value={p.name} onChange={(e) => updatePartida(p.id, "name", e.target.value)} />
+            </div>
             <input type="number" className="col-span-2 border border-gray-200 rounded px-1 py-0.5 text-right"
               value={p.monto} onChange={(e) => updatePartida(p.id, "monto", e.target.value)} />
             <span className="col-span-1 text-right text-gray-500">{p.pctInd.toFixed(1)}%</span>
@@ -479,11 +496,16 @@ export default function AnalisisPareto() {
             <button onClick={() => removePartida(p.id)} className="col-span-1 text-gray-400 hover:text-red-500 text-right">✕</button>
           </div>
         ))}
+        </>
+        )}
+        {analizadas.length === 0 && (
+          <p className="text-sm text-gray-400 italic py-4">No hay partidas cargadas todavía.</p>
+        )}
         <button onClick={addPartida} className="text-xs text-blue-600 hover:underline mt-2">+ agregar partida</button>
       </div>
 
       <div className="mb-6">
-        {["A", "B", "C"].map((c) =>
+        {(topN === "80" ? ["A"] : topN === "90" ? ["A", "B"] : ["A", "B", "C"]).map((c) =>
           porClase[c].length === 0 ? null : (
             <div key={c} className="mb-3 border border-gray-200 rounded p-3">
               <div className="flex items-center gap-2 mb-1">
@@ -559,7 +581,7 @@ export default function AnalisisPareto() {
                     </span>
                   </div>
                   <p className="text-xs text-gray-500">
-                    {resumirNombres(f.partidas, 8, (p) => truncar(p.name) + (p.clase === "A" ? " (prioridad alta)" : ""))}
+                    {resumirNombres(f.partidas, 8, (p) => (p.codigo ? p.codigo + " " : "") + encabezado(p.name) + (p.clase === "A" ? " (prioridad alta)" : ""))}
                   </p>
                 </div>
               ))}
@@ -606,7 +628,7 @@ export default function AnalisisPareto() {
         {prioridadesCompra.length === 0 && <p className="text-xs text-gray-400 italic">No se detectaron partidas de compra crítica con la información actual.</p>}
         {prioridadesCompra.map((p, i) => (
           <div key={p.id} className="flex items-center justify-between text-xs mb-1.5 border-b border-gray-100 pb-1.5">
-            <span>{i + 1}. {truncar(p.name, 90)}</span>
+            <span>{i + 1}. {p.codigo ? p.codigo + " — " : ""}{encabezado(p.name, 70)}</span>
             <span className="text-gray-500">Necesario desde día {p.inicioFase} · fase {p.fase} · clase {p.clase}</span>
           </div>
         ))}
@@ -620,7 +642,7 @@ export default function AnalisisPareto() {
         </p>
         {actividadesCriticas.map((p, i) => (
           <div key={p.id} className="flex items-center justify-between text-xs mb-1.5 border-b border-gray-100 pb-1.5">
-            <span>{i + 1}. {truncar(p.name, 90)}</span>
+            <span>{i + 1}. {p.codigo ? p.codigo + " — " : ""}{encabezado(p.name, 70)}</span>
             <span className="text-gray-500">{p.pctInd.toFixed(1)}% del presupuesto · fase {p.fase} · día {p.inicioFase}</span>
           </div>
         ))}
@@ -631,11 +653,11 @@ export default function AnalisisPareto() {
         <p className="text-sm text-gray-800 leading-relaxed">
           El presupuesto analizado asciende a {fmt(total)}, distribuido en {analizadas.length} partidas y {cronograma.length} fases constructivas, con un plazo estimado de {plazoTotal} días.
           {" "}Este presupuesto tiene un Review Compression de {reviewCompression.toFixed(1)}×: {n80} partidas ({pct80DePartidas.toFixed(0)}%) explican el 80% del valor total.
-          {" "}{porClase.A.length} partidas de clase A concentran la mayor parte del impacto financiero y deben revisarse con prioridad, siendo "{truncar(analizadas.find(p=>p.clase==="A")?.name, 60) || "—"}" la de mayor peso individual.
+          {" "}{porClase.A.length} partidas de clase A concentran la mayor parte del impacto financiero y deben revisarse con prioridad, siendo "{encabezado(analizadas.find(p=>p.clase==="A")?.name, 60) || "—"}" la de mayor peso individual.
           {" "}La fase de mayor costo es "{costoPorFase[0]?.name}" con {costoPorFase[0] ? (costoPorFase[0].pct*100).toFixed(0) : 0}% del presupuesto.
           {" "}El período de mayor exigencia de flujo de caja es {picoFlujo?.periodo || "—"}, con un desembolso estimado de {picoFlujo ? fmt(picoFlujo.monto) : "$0"}.
-          {" "}{prioridadesCompra.length > 0 && <>La primera orden de compra a colocar es "{truncar(prioridadesCompra[0].name, 60)}", requerida desde el día {prioridadesCompra[0].inicioFase}. </>}
-          La actividad más crítica para dar seguimiento cercano es "{truncar(actividadesCriticas[0]?.name, 60) || "—"}".
+          {" "}{prioridadesCompra.length > 0 && <>La primera orden de compra a colocar es "{encabezado(prioridadesCompra[0].name, 60)}", requerida desde el día {prioridadesCompra[0].inicioFase}. </>}
+          La actividad más crítica para dar seguimiento cercano es "{encabezado(actividadesCriticas[0]?.name, 60) || "—"}".
         </p>
       </div>
     </div>

@@ -22,14 +22,14 @@ export default function App() {
 
       {/* Hero */}
       <section className="bg-[#F7F5F1] blueprint-grid border-b border-gray-200">
-        <div className="max-w-5xl mx-auto px-4 py-16 md:py-24 flex flex-col items-center text-center">
-          <img src={logoPrincipal} alt="Cimbra — inteligencia de costos" className="h-40 w-auto mb-8" />
-          <h1 className="text-2xl md:text-4xl font-semibold leading-snug max-w-3xl text-cimbra-dark">
+        <div className="max-w-5xl mx-auto px-4 py-10 md:py-14 flex flex-col items-center text-center">
+          <img src={logoPrincipal} alt="Cimbra — inteligencia de costos" className="h-24 w-auto mb-5" />
+          <h1 className="text-lg md:text-xl font-semibold leading-snug max-w-xl text-cimbra-dark">
             Tu software calcula el presupuesto. Cimbra te ayuda a saber dónde mirar.
           </h1>
           <a
             href="#herramienta"
-            className="mt-8 inline-block bg-cimbra-amber text-white font-medium px-6 py-3 rounded-lg hover:opacity-90 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cimbra-dark"
+            className="mt-5 inline-block bg-cimbra-amber text-white font-medium px-5 py-2.5 rounded-lg hover:opacity-90 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cimbra-dark"
           >
             Probar gratis
           </a>
@@ -37,7 +37,7 @@ export default function App() {
       </section>
 
       {/* Posicionamiento: todo en un solo bloque compacto */}
-      <section className="max-w-4xl mx-auto px-4 py-12">
+      <section className="max-w-4xl mx-auto px-4 py-8">
         <div className="bg-gray-50 border border-gray-100 rounded-xl p-6 md:p-8">
           <div className="mb-6 pb-6 border-b border-gray-200">
             <h2 className="text-lg font-semibold mb-2">Qué es</h2>
@@ -95,7 +95,7 @@ export default function App() {
       </section>
 
       {/* Caso de referencia */}
-      <section className="max-w-3xl mx-auto px-4 py-10">
+      <section className="max-w-3xl mx-auto px-4 py-8">
         <h2 className="text-xl font-semibold mb-3">Caso de referencia</h2>
         <p className="text-gray-700 leading-relaxed">
           En uno de los proyectos de mayor envergadura ejecutados por su fundador como Director de
@@ -108,7 +108,7 @@ export default function App() {
 
       {/* La herramienta */}
       <section id="herramienta" className="bg-gray-50 border-t border-gray-100">
-        <div className="max-w-5xl mx-auto px-4 py-16">
+        <div className="max-w-5xl mx-auto px-4 py-10">
           <h2 className="text-xl font-semibold mb-2 text-center">Prueba la herramienta</h2>
           <p className="text-gray-500 text-sm text-center mb-8">
             Sube tu presupuesto (Excel o CSV) o edita las partidas de ejemplo. El archivo nunca se sube a
