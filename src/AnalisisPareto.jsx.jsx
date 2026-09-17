@@ -179,9 +179,6 @@ export default function AnalisisPareto() {
     return { ...p, rank: i + 1, pctInd, pctAcum, clase, nombreCorto };
   });
 
-  const partidasMostradas = topN === "todos" ? analizadas : analizadas.slice(0, topN === "80" ? n80 : topN === "90" ? n90 : n95);
-  const pctCubierto = partidasMostradas.length ? partidasMostradas[partidasMostradas.length - 1].pctAcum : 0;
-
   const porClase = { A: [], B: [], C: [] };
   analizadas.forEach((p) => porClase[p.clase].push(p));
 
@@ -196,6 +193,9 @@ export default function AnalisisPareto() {
   const n95 = encontrarN(95);
   const pct80DePartidas = analizadas.length ? (n80 / analizadas.length) * 100 : 0;
   const reviewCompression = n80 > 0 ? analizadas.length / n80 : 0;
+
+  const partidasMostradas = topN === "todos" ? analizadas : analizadas.slice(0, topN === "80" ? n80 : topN === "90" ? n90 : n95);
+  const pctCubierto = partidasMostradas.length ? partidasMostradas[partidasMostradas.length - 1].pctAcum : 0;
 
   const fasesMap = {};
   analizadas.forEach((p) => {
