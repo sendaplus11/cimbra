@@ -34,6 +34,7 @@ const fasePorClase = {
 };
 
 const NAME_KEYS = ["partida", "descripcion", "descripción", "concepto", "item", "actividad"];
+const MOSTRAR_CRITICAL_ACTIVITIES = false;
 const CODE_KEYS = ["cod", "código", "nº", "no.", "n°"];
 const AMOUNT_KEYS_PRIORITY = ["total", "monto", "importe", "subtotal", "costo", "precio"];
 
@@ -88,11 +89,23 @@ function classifyPhase(name) {
   return "Otras partidas";
 }
 
+function CostDriverTooltip({ active, payload }) {
+  if (!active || !payload || !payload.length) return null;
+  const p = payload[0].payload;
+  return (
+    <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, padding: "8px 10px", fontSize: 12, maxWidth: 280, boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
+      {p.codigo && <div style={{ color: "#6B7680", fontFamily: "monospace", fontSize: 11, marginBottom: 2 }}>{p.codigo}</div>}
+      <div style={{ fontWeight: 500, marginBottom: 4 }}>{p.name}</div>
+      <div style={{ color: "#374151" }}>{fmt(p.monto)} · {p.pctInd.toFixed(1)}% individual · {p.pctAcum.toFixed(1)}% acumulado</div>
+    </div>
+  );
+}
+
 export default function AnalisisPareto() {
   const [partidas, setPartidas] = useState(initialPartidas);
   const [umbralA, setUmbralA] = useState(80);
   const [umbralB, setUmbralB] = useState(95);
-  const [plazoTotal, setPlazoTotal] = useState(90);
+  const [plazoTotal, setPlazoTotal] = useState(null);
   const [periodicidad, setPeriodicidad] = useState("mensual");
   const [inicioManual, setInicioManual] = useState({});
   const [duracionManual, setDuracionManual] = useState({});
@@ -394,26 +407,28 @@ export default function AnalisisPareto() {
 
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mt-2">Bloque de pre-oferta — para usar antes de presentar la propuesta</p>
       <h2 className="text-base font-semibold mt-2 mb-1">1. 💰 Cost Analysis</h2>
-      <p className="text-xs text-gray-400 mb-2">
-        {usaCategoriasReales ? "Capítulos tomados directamente del archivo importado." : "Disponible solo cuando el presupuesto trae capítulos o códigos jerárquicos propios."}
-      </p>
-      <div className="mb-6 border border-gray-200 rounded p-3">
-        {analizadas.length === 0 && <p className="text-xs text-gray-400 italic">Sube un presupuesto o agrega partidas para ver la distribución por categoría.</p>}
-        {analizadas.length > 0 && !usaCategoriasReales && (
-          <p className="text-xs text-gray-500 italic">
-            Este presupuesto no trae una estructura de capítulos o códigos jerárquicos identificable, así que no mostramos una distribución por categoría para evitar adivinar. Usa el módulo 2, Cost Drivers, que analiza cada partida individualmente y funciona sin importar la estructura del archivo.
-          </p>
-        )}
-        {usaCategoriasReales && costoPorFase.map((f) => (
-          <div key={f.name} className="flex items-center gap-3 mb-2 text-xs">
-            <span className="w-52 truncate">{f.name}</span>
-            <div className="flex-1 bg-gray-100 rounded h-4 relative overflow-hidden">
-              <div className="h-4 rounded" style={{ width: (f.pct * 100).toFixed(1) + "%", background: "#3A5A73" }}></div>
-            </div>
-            <span className="w-28 text-right text-gray-600">{fmt(f.monto)} ({(f.pct * 100).toFixed(1)}%)</span>
+      {analizadas.length === 0 && (
+        <p className="text-xs text-gray-400 italic mb-6">Sube un presupuesto o agrega partidas para ver la distribución por categoría.</p>
+      )}
+      {analizadas.length > 0 && !usaCategoriasReales && (
+        <p className="text-xs text-gray-400 italic mb-6">No disponible: este presupuesto no trae capítulos ni códigos jerárquicos identificables. Usa el módulo 2, Cost Drivers, que funciona sin importar la estructura del archivo.</p>
+      )}
+      {usaCategoriasReales && (
+        <>
+          <p className="text-xs text-gray-400 mb-2">Capítulos tomados directamente del archivo importado.</p>
+          <div className="mb-6 border border-gray-200 rounded p-3">
+            {costoPorFase.map((f) => (
+              <div key={f.name} className="flex items-center gap-3 mb-2 text-xs">
+                <span className="w-52 truncate">{f.name}</span>
+                <div className="flex-1 bg-gray-100 rounded h-4 relative overflow-hidden">
+                  <div className="h-4 rounded" style={{ width: (f.pct * 100).toFixed(1) + "%", background: "#3A5A73" }}></div>
+                </div>
+                <span className="w-28 text-right text-gray-600">{fmt(f.monto)} ({(f.pct * 100).toFixed(1)}%)</span>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </>
+      )}
 
       <h2 className="text-base font-semibold mt-6 mb-2">2. 📊 Cost Drivers</h2>
 
@@ -475,7 +490,7 @@ export default function AnalisisPareto() {
                 <XAxis dataKey="nombreCorto" angle={-35} textAnchor="end" interval={0} height={70} tick={{ fontSize: 10 }} />
                 <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
                 <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v, n) => (n === "pctAcum" ? v.toFixed(1) + "%" : fmt(v))} />
+                <Tooltip content={<CostDriverTooltip />} />
                 <ReferenceLine yAxisId="right" y={umbralA} stroke="#b91c1c" strokeDasharray="4 4" />
                 <Bar yAxisId="left" dataKey="monto">
                   {partidasMostradas.map((p) => (
@@ -566,6 +581,17 @@ export default function AnalisisPareto() {
       <h2 className="text-base font-semibold mt-8 mb-1">3. 🏗️ Construction Schedule</h2>
       <p className="text-xs text-gray-400 mb-2">Útil como anexo de la oferta y también durante la ejecución</p>
       <div className="mb-6 border border-gray-200 rounded p-3">
+        {analizadas.length === 0 && <p className="text-xs text-gray-400 italic">Sube un presupuesto o agrega partidas para poder estimar un cronograma.</p>}
+        {analizadas.length > 0 && plazoTotal === null && (
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-600">¿Cuál es el plazo total estimado de este proyecto, en días?</label>
+            <input type="number" className="w-20 border border-gray-200 rounded px-1 py-0.5 text-right"
+              placeholder="Ej: 60"
+              onChange={(e) => { const v = Number(e.target.value); if (v > 0) setPlazoTotal(v); }} />
+          </div>
+        )}
+        {analizadas.length > 0 && plazoTotal !== null && (
+        <>
         <div className="flex items-center justify-end mb-3">
           <div className="flex items-center gap-2">
             <label className="text-xs text-gray-500">Plazo total (días)</label>
@@ -625,11 +651,19 @@ export default function AnalisisPareto() {
             </div>
           </>
         )}
+        </>
+        )}
       </div>
 
       <h2 className="text-base font-semibold mt-6 mb-1">4. 📈 Cash Flow</h2>
       <p className="text-xs text-gray-400 mb-2">Útil como anexo de la oferta y también durante la ejecución</p>
       <div className="mb-6 border border-gray-200 rounded p-3">
+        {(analizadas.length === 0 || plazoTotal === null) ? (
+          <p className="text-xs text-gray-400 italic">
+            {analizadas.length === 0 ? "Sube un presupuesto para ver el flujo de caja." : "Define el plazo total en Construction Schedule (módulo 3) para poder calcular el flujo de caja."}
+          </p>
+        ) : (
+        <>
         <div className="flex items-center justify-end mb-3">
           <div className="flex items-center gap-2">
             <label className="text-xs text-gray-500">Periodicidad</label>
@@ -654,6 +688,8 @@ export default function AnalisisPareto() {
             <Line yAxisId="right" dataKey="pctAcum" stroke="#111827" strokeWidth={2} dot={{ r: 3 }} name="Avance físico-financiero acumulado" />
           </ComposedChart>
         </ResponsiveContainer>
+        </>
+        )}
       </div>
 
       <h2 className="text-base font-semibold mt-6 mb-1">5. 🛒 Procurement Priorities</h2>
@@ -671,30 +707,33 @@ export default function AnalisisPareto() {
         ))}
       </div>
 
-      <h2 className="text-base font-semibold mt-6 mb-1">6. 🎯 Critical Activities</h2>
-      <p className="text-xs text-gray-400 mb-2">Pausado — hoy no aporta información distinta a Cost Drivers</p>
-      <div className="mb-6 border border-gray-200 rounded p-3">
-        <p className="text-xs text-gray-500 mb-3">
-          Combina peso en el presupuesto y urgencia según el cronograma (qué tan pronto se necesita). No es una ruta crítica calculada por dependencias reales entre actividades, sino una priorización razonable para dar seguimiento cercano.
-        </p>
-        {actividadesCriticas.map((p, i) => (
-          <div key={p.id} className="flex items-center justify-between text-xs mb-1.5 border-b border-gray-100 pb-1.5">
-            <span>{i + 1}. {p.codigo ? p.codigo + " — " : ""}{encabezado(p.name, 70)}</span>
-            <span className="text-gray-500">{p.pctInd.toFixed(1)}% del presupuesto · fase {p.fase} · día {p.inicioFase}</span>
+      {MOSTRAR_CRITICAL_ACTIVITIES && (
+        <>
+          <h2 className="text-base font-semibold mt-6 mb-1">🎯 Critical Activities</h2>
+          <p className="text-xs text-gray-400 mb-2">Pausado — hoy no aporta información distinta a Cost Drivers</p>
+          <div className="mb-6 border border-gray-200 rounded p-3">
+            <p className="text-xs text-gray-500 mb-3">
+              Combina peso en el presupuesto y urgencia según el cronograma (qué tan pronto se necesita). No es una ruta crítica calculada por dependencias reales entre actividades, sino una priorización razonable para dar seguimiento cercano.
+            </p>
+            {actividadesCriticas.map((p, i) => (
+              <div key={p.id} className="flex items-center justify-between text-xs mb-1.5 border-b border-gray-100 pb-1.5">
+                <span>{i + 1}. {p.codigo ? p.codigo + " — " : ""}{encabezado(p.name, 70)}</span>
+                <span className="text-gray-500">{p.pctInd.toFixed(1)}% del presupuesto · fase {p.fase} · día {p.inicioFase}</span>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </>
+      )}
 
-      <h2 className="text-base font-semibold mt-6 mb-2">7. 📑 Executive Report</h2>
+      <h2 className="text-base font-semibold mt-6 mb-2">6. 📑 Executive Report</h2>
       <div className="mb-6 border border-gray-200 rounded p-3 bg-gray-50">
         <p className="text-sm text-gray-800 leading-relaxed">
-          El presupuesto analizado asciende a {fmt(total)}, distribuido en {analizadas.length} partidas y {cronograma.length} fases constructivas, con un plazo estimado de {plazoTotal} días.
+          El presupuesto analizado asciende a {fmt(total)}, distribuido en {analizadas.length} partidas y {cronograma.length} fases constructivas{plazoTotal ? ", con un plazo estimado de " + plazoTotal + " días" : " (plazo aún no definido en Construction Schedule)"}.
           {" "}Este presupuesto tiene un Review Compression de {reviewCompression.toFixed(1)}×: {n80} partidas ({pct80DePartidas.toFixed(0)}%) explican el 80% del valor total.
           {" "}{porClase.A.length} partidas de clase A concentran la mayor parte del impacto financiero y deben revisarse con prioridad, siendo "{encabezado(analizadas.find(p=>p.clase==="A")?.name, 60) || "—"}" la de mayor peso individual.
-          {" "}La fase de mayor costo es "{costoPorFase[0]?.name}" con {costoPorFase[0] ? (costoPorFase[0].pct*100).toFixed(0) : 0}% del presupuesto.
-          {" "}El período de mayor exigencia de flujo de caja es {picoFlujo?.periodo || "—"}, con un desembolso estimado de {picoFlujo ? fmt(picoFlujo.monto) : "$0"}.
-          {" "}{prioridadesCompra.length > 0 && <>La primera orden de compra a colocar es "{encabezado(prioridadesCompra[0].name, 60)}", requerida desde el día {prioridadesCompra[0].inicioFase}. </>}
-          La actividad más crítica para dar seguimiento cercano es "{encabezado(actividadesCriticas[0]?.name, 60) || "—"}".
+          {" "}{usaCategoriasReales && costoPorFase[0] && <>La fase de mayor costo es "{costoPorFase[0].name}" con {(costoPorFase[0].pct*100).toFixed(0)}% del presupuesto. </>}
+          {" "}{plazoTotal && <>El período de mayor exigencia de flujo de caja es {picoFlujo?.periodo || "—"}, con un desembolso estimado de {picoFlujo ? fmt(picoFlujo.monto) : "$0"}. </>}
+          {prioridadesCompra.length > 0 && <>La primera orden de compra a colocar es "{encabezado(prioridadesCompra[0].name, 60)}", requerida desde el día {prioridadesCompra[0].inicioFase}.</>}
         </p>
       </div>
     </div>
