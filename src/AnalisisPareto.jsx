@@ -35,6 +35,7 @@ const fasePorClase = {
 
 const NAME_KEYS = ["partida", "descripcion", "descripción", "concepto", "item", "actividad"];
 const MOSTRAR_CRITICAL_ACTIVITIES = false;
+const MOSTRAR_COST_ANALYSIS = false;
 const CODE_KEYS = ["cod", "código", "nº", "no.", "n°"];
 const AMOUNT_KEYS_PRIORITY = ["total", "monto", "importe", "subtotal", "costo", "precio"];
 
@@ -184,6 +185,9 @@ export default function AnalisisPareto() {
           return;
         }
         setPartidas(nuevas);
+        setPlazoTotal(null);
+        setInicioManual({});
+        setDuracionManual({});
         const tieneCategoriasReales = nuevas.some((p) => p.categoria);
         const totalCategorias = new Set(nuevas.map((p) => p.categoria).filter(Boolean)).size;
         setImportInfo(
@@ -415,31 +419,36 @@ export default function AnalisisPareto() {
       </div>
 
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mt-2">Bloque de pre-oferta — para usar antes de presentar la propuesta</p>
-      <h2 className="text-base font-semibold mt-2 mb-1">1. 💰 Cost Analysis</h2>
-      {analizadas.length === 0 && (
-        <p className="text-xs text-gray-400 italic mb-6">Sube un presupuesto o agrega partidas para ver la distribución por categoría.</p>
-      )}
-      {analizadas.length > 0 && !usaCategoriasReales && (
-        <p className="text-xs text-gray-400 italic mb-6">No disponible: este presupuesto no trae capítulos ni códigos jerárquicos identificables. Usa el módulo 2, Cost Drivers, que funciona sin importar la estructura del archivo.</p>
-      )}
-      {usaCategoriasReales && (
+
+      {MOSTRAR_COST_ANALYSIS && (
         <>
-          <p className="text-xs text-gray-400 mb-2">Capítulos tomados directamente del archivo importado.</p>
-          <div className="mb-6 border border-gray-200 rounded p-3">
-            {costoPorFase.map((f) => (
-              <div key={f.name} className="flex items-center gap-3 mb-2 text-xs">
-                <span className="w-52 truncate">{f.name}</span>
-                <div className="flex-1 bg-gray-100 rounded h-4 relative overflow-hidden">
-                  <div className="h-4 rounded" style={{ width: (f.pct * 100).toFixed(1) + "%", background: "#3A5A73" }}></div>
-                </div>
-                <span className="w-28 text-right text-gray-600">{fmt(f.monto)} ({(f.pct * 100).toFixed(1)}%)</span>
+          <h2 className="text-base font-semibold mt-2 mb-1">💰 Cost Analysis</h2>
+          {analizadas.length === 0 && (
+            <p className="text-xs text-gray-400 italic mb-6">Sube un presupuesto o agrega partidas para ver la distribución por categoría.</p>
+          )}
+          {analizadas.length > 0 && !usaCategoriasReales && (
+            <p className="text-xs text-gray-400 italic mb-6">No disponible: este presupuesto no trae capítulos ni códigos jerárquicos identificables. Usa Cost Drivers, que funciona sin importar la estructura del archivo.</p>
+          )}
+          {usaCategoriasReales && (
+            <>
+              <p className="text-xs text-gray-400 mb-2">Capítulos tomados directamente del archivo importado.</p>
+              <div className="mb-6 border border-gray-200 rounded p-3">
+                {costoPorFase.map((f) => (
+                  <div key={f.name} className="flex items-center gap-3 mb-2 text-xs">
+                    <span className="w-52 truncate">{f.name}</span>
+                    <div className="flex-1 bg-gray-100 rounded h-4 relative overflow-hidden">
+                      <div className="h-4 rounded" style={{ width: (f.pct * 100).toFixed(1) + "%", background: "#3A5A73" }}></div>
+                    </div>
+                    <span className="w-28 text-right text-gray-600">{fmt(f.monto)} ({(f.pct * 100).toFixed(1)}%)</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          )}
         </>
       )}
 
-      <h2 className="text-base font-semibold mt-6 mb-2">2. 📊 Cost Drivers</h2>
+      <h2 className="text-base font-semibold mt-2 mb-2">1. 📊 Cost Drivers</h2>
 
       <div className="flex items-center gap-6 mb-4 bg-gray-50 p-3 rounded border border-gray-200">
         <div className="flex items-center gap-2">
@@ -587,7 +596,7 @@ export default function AnalisisPareto() {
         )}
       </div>
 
-      <h2 className="text-base font-semibold mt-8 mb-1">3. 🏗️ Construction Schedule</h2>
+      <h2 className="text-base font-semibold mt-8 mb-1">2. 🏗️ Construction Schedule</h2>
       <p className="text-xs text-gray-400 mb-2">Útil como anexo de la oferta y también durante la ejecución</p>
       <div className="mb-6 border border-gray-200 rounded p-3">
         {analizadas.length === 0 && <p className="text-xs text-gray-400 italic">Sube un presupuesto o agrega partidas para poder estimar un cronograma.</p>}
@@ -669,7 +678,7 @@ export default function AnalisisPareto() {
         )}
       </div>
 
-      <h2 className="text-base font-semibold mt-6 mb-1">4. 📈 Cash Flow</h2>
+      <h2 className="text-base font-semibold mt-6 mb-1">3. 📈 Cash Flow</h2>
       <p className="text-xs text-gray-400 mb-2">Útil como anexo de la oferta y también durante la ejecución</p>
       <div className="mb-6 border border-gray-200 rounded p-3">
         {(analizadas.length === 0 || plazoTotal === null) ? (
@@ -706,7 +715,7 @@ export default function AnalisisPareto() {
         )}
       </div>
 
-      <h2 className="text-base font-semibold mt-6 mb-1">5. 🛒 Procurement Priorities</h2>
+      <h2 className="text-base font-semibold mt-6 mb-1">4. 🛒 Procurement Priorities</h2>
       <p className="text-xs text-gray-400 mb-2">Ejecución — para usar una vez adjudicado el proyecto</p>
       <div className="mb-6 border border-gray-200 rounded p-3">
         <p className="text-xs text-gray-500 mb-3">
@@ -739,13 +748,12 @@ export default function AnalisisPareto() {
         </>
       )}
 
-      <h2 className="text-base font-semibold mt-6 mb-2">6. 📑 Executive Report</h2>
+      <h2 className="text-base font-semibold mt-6 mb-2">5. 📑 Executive Report</h2>
       <div className="mb-6 border border-gray-200 rounded p-3 bg-gray-50">
         <p className="text-sm text-gray-800 leading-relaxed">
           El presupuesto analizado asciende a {fmt(total)}, distribuido en {analizadas.length} partidas y {cronograma.length} fases constructivas{plazoTotal ? ", con un plazo estimado de " + plazoTotal + " días" : " (plazo aún no definido en Construction Schedule)"}.
           {" "}Este presupuesto tiene un Review Compression de {reviewCompression.toFixed(1)}×: {n80} partidas ({pct80DePartidas.toFixed(0)}%) explican el 80% del valor total.
           {" "}{porClase.A.length} partidas de clase A concentran la mayor parte del impacto financiero y deben revisarse con prioridad, siendo "{encabezado(analizadas.find(p=>p.clase==="A")?.name, 60) || "—"}" la de mayor peso individual.
-          {" "}{usaCategoriasReales && costoPorFase[0] && <>La fase de mayor costo es "{costoPorFase[0].name}" con {(costoPorFase[0].pct*100).toFixed(0)}% del presupuesto. </>}
           {" "}{plazoTotal && <>El período de mayor exigencia de flujo de caja es {picoFlujo?.periodo || "—"}, con un desembolso estimado de {picoFlujo ? fmt(picoFlujo.monto) : "$0"}. </>}
           {prioridadesCompra.length > 0 && <>La primera orden de compra a colocar es "{encabezado(prioridadesCompra[0].name, 60)}", requerida desde el día {prioridadesCompra[0].inicioFase}.</>}
         </p>
