@@ -109,7 +109,7 @@ export default function App() {
       {/* La herramienta */}
       <section id="herramienta" className="bg-gray-50 border-t border-gray-100">
         <div className="max-w-5xl mx-auto px-4 py-10">
-          <h2 className="text-xl font-semibold mb-2 text-center">Prueba la herramienta</h2>
+          <h2 className="text-xl font-semibold mb-2 text-center">Compruébalo con tu propio presupuesto</h2>
           <p className="text-gray-500 text-sm text-center mb-8">
             Sube tu presupuesto (Excel o CSV) o edita las partidas de ejemplo. El archivo nunca se sube a
             ningún servidor: todo el análisis ocurre en tu navegador.

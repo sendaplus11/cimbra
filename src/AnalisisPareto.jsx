@@ -37,6 +37,17 @@ const NAME_KEYS = ["partida", "descripcion", "descripción", "concepto", "item",
 const CODE_KEYS = ["codigo", "código", "cod.", "cod ", "nº", "no.", "n°"];
 const AMOUNT_KEYS_PRIORITY = ["total", "monto", "importe", "subtotal", "costo", "precio"];
 
+function prefijoCodigo(codigo) {
+  if (!codigo) return null;
+  const partes = String(codigo).trim().split("-");
+  if (partes.length <= 1) return codigo;
+  const ultima = partes[partes.length - 1].trim();
+  if (/^\d+(\.\d+)?$/.test(ultima)) {
+    return partes.slice(0, -1).join("-");
+  }
+  return codigo;
+}
+
 function encabezado(s, maxFallback = 55) {
   const str = String(s || "").trim();
   const corte = str.indexOf(".");
@@ -85,7 +96,7 @@ export default function AnalisisPareto() {
   const [periodicidad, setPeriodicidad] = useState("mensual");
   const [inicioManual, setInicioManual] = useState({});
   const [duracionManual, setDuracionManual] = useState({});
-  const [topN, setTopN] = useState("umbral");
+  const [topN, setTopN] = useState("80");
   const [importError, setImportError] = useState("");
   const [importInfo, setImportInfo] = useState("");
 
@@ -133,7 +144,6 @@ export default function AnalisisPareto() {
         }
         const nuevas = [];
         let categoriaActual = null;
-        let categoriasDetectadas = 0;
         for (let r = headerRowIdx + 1; r < rows.length; r++) {
           const row = rows[r];
           if (!row) continue;
@@ -142,16 +152,18 @@ export default function AnalisisPareto() {
           const amount = typeof amountRaw === "number" ? amountRaw : parseFloat(String(amountRaw || "").replace(/[^0-9.-]/g, ""));
           const nombreLimpio = name ? String(name).trim() : "";
           if (nombreLimpio && (isNaN(amount) || amount <= 0)) {
-            const restoVacio = row.every((celda, idx) => idx === nameIdx || celda === undefined || celda === null || String(celda).trim() === "");
-            if (restoVacio && nombreLimpio.length > 2) {
-              categoriaActual = nombreLimpio;
-              categoriasDetectadas++;
+            if (codigoIdx === -1) {
+              const restoVacio = row.every((celda, idx) => idx === nameIdx || celda === undefined || celda === null || String(celda).trim() === "");
+              if (restoVacio && nombreLimpio.length > 2) {
+                categoriaActual = nombreLimpio;
+              }
             }
             continue;
           }
           const codigo = codigoIdx !== -1 && row[codigoIdx] ? String(row[codigoIdx]).trim() : null;
           if (nombreLimpio && !isNaN(amount) && amount > 0) {
-            nuevas.push({ id: newId(), name: nombreLimpio, monto: amount, codigo, categoria: categoriaActual });
+            const categoria = codigo ? prefijoCodigo(codigo) : categoriaActual;
+            nuevas.push({ id: newId(), name: nombreLimpio, monto: amount, codigo, categoria });
           }
         }
         if (nuevas.length === 0) {
@@ -160,9 +172,10 @@ export default function AnalisisPareto() {
         }
         setPartidas(nuevas);
         const tieneCategoriasReales = nuevas.some((p) => p.categoria);
+        const totalCategorias = new Set(nuevas.map((p) => p.categoria).filter(Boolean)).size;
         setImportInfo(
           nuevas.length + " partidas importadas correctamente." +
-          (tieneCategoriasReales ? " Se detectaron " + categoriasDetectadas + " capítulos propios del archivo y se usarán en Cost Analysis." : "")
+          (tieneCategoriasReales ? " Se detectaron " + totalCategorias + " capítulos propios del archivo y se usarán en Cost Analysis." : "")
         );
       } catch (err) {
         setImportError("No se pudo leer el archivo. Verifica que sea un Excel o CSV válido.");
@@ -204,12 +217,10 @@ export default function AnalisisPareto() {
   }
   const n80 = encontrarN(80);
   const n90 = encontrarN(90);
-  const n95 = encontrarN(95);
-  const nUmbralA = encontrarN(umbralA);
   const pct80DePartidas = analizadas.length ? (n80 / analizadas.length) * 100 : 0;
   const reviewCompression = n80 > 0 ? analizadas.length / n80 : 0;
 
-  const partidasMostradas = topN === "todos" ? analizadas : analizadas.slice(0, nUmbralA);
+  const partidasMostradas = topN === "todos" ? analizadas : analizadas.slice(0, topN === "90" ? n90 : n80);
   const pctCubierto = partidasMostradas.length ? partidasMostradas[partidasMostradas.length - 1].pctAcum : 0;
 
   const fasesMap = {};
@@ -311,7 +322,6 @@ export default function AnalisisPareto() {
       { Ranking: "Review Compression", Partida: reviewCompression.toFixed(1) + "×" },
       { Ranking: "Partidas para 80%", Partida: n80, Monto: pct80DePartidas.toFixed(0) + "%" },
       { Ranking: "Partidas para 90%", Partida: n90, Monto: (analizadas.length ? (n90/analizadas.length*100) : 0).toFixed(0) + "%" },
-      { Ranking: "Partidas para 95%", Partida: n95, Monto: (analizadas.length ? (n95/analizadas.length*100) : 0).toFixed(0) + "%" },
     ], { origin: -1, skipHeader: true });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Cost Drivers");
@@ -440,7 +450,6 @@ export default function AnalisisPareto() {
         <div className="flex gap-4 text-xs text-blue-900">
           <span>80% del valor → {n80} partidas ({pct80DePartidas.toFixed(0)}%)</span>
           <span>90% → {n90} ({analizadas.length ? (n90/analizadas.length*100).toFixed(0) : 0}%)</span>
-          <span>95% → {n95} ({analizadas.length ? (n95/analizadas.length*100).toFixed(0) : 0}%)</span>
         </div>
       </div>
 
@@ -482,7 +491,8 @@ export default function AnalisisPareto() {
           <div className="flex items-center gap-2 text-xs">
             <label className="text-gray-500">Mostrar</label>
             <select className="border border-gray-200 rounded px-1 py-0.5" value={topN} onChange={(e) => setTopN(e.target.value)}>
-              <option value="umbral">Vista de trabajo — umbral clase A ({nUmbralA})</option>
+              <option value="80">80% del valor ({n80})</option>
+              <option value="90">90% del valor ({n90})</option>
               <option value="todos">Todas ({analizadas.length})</option>
             </select>
           </div>
@@ -527,7 +537,7 @@ export default function AnalisisPareto() {
       </div>
 
       <div className="mb-6">
-        {(topN === "umbral" ? ["A"] : ["A", "B", "C"]).map((c) =>
+        {(topN === "80" ? ["A"] : topN === "90" ? ["A", "B"] : ["A", "B", "C"]).map((c) =>
           porClase[c].length === 0 ? null : (
             <div key={c} className="mb-3 border border-gray-200 rounded p-3">
               <div className="flex items-center gap-2 mb-1">
