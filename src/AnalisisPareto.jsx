@@ -315,8 +315,6 @@ export default function AnalisisPareto() {
 
   const faseInicioMap = {};
   cronograma.forEach((f) => (faseInicioMap[f.name] = f.inicio));
-  const LONG_LEAD_KEYWORDS = ["transformador", "ascensor", "planta electrica", "planta eléctrica", "generador electrico", "generador eléctrico", "grupo electrogeno", "grupo electrógeno", "aire acondicionado", "sistema contra incendio", "subestacion electrica", "subestación eléctrica", "equipo de bombeo", "bomba centrifuga", "bomba centrífuga", "servidor", "escalera metalica", "escalera metálica", "estructura de acero", "estructura metalica", "estructura metálica", "blindad", "acero inoxidable", "sistema de piso falso", "piso tecnico", "piso técnico", "camara de seguridad", "cámara de seguridad", "circuito cerrado", "panel solar", "importad"];
-  const esLargoPlazo = (name) => LONG_LEAD_KEYWORDS.some((k) => String(name).toLowerCase().includes(k));
 
   const analizadasConFase = analizadas.map((p) => {
     const fase = usarCapitulosParaSchedule ? (p.categoria || "Sin categoría en el archivo") : (p.codigo ? p.codigo + " " : "") + encabezado(p.name, 45);
@@ -329,7 +327,7 @@ export default function AnalisisPareto() {
   const actividadesCriticas = [...analizadasConFase].sort((a, b) => b.criticidad - a.criticidad).slice(0, 5);
 
   const prioridadesCompra = analizadasConFase
-    .filter((p) => (p.clase === "A" || p.clase === "B") && esLargoPlazo(p.name))
+    .filter((p) => p.clase === "A" || p.clase === "B")
     .sort((a, b) => a.inicioFase - b.inicioFase);
 
   const picoFlujo = flujoCaja.length ? flujoCaja.reduce((max, f) => (f.monto > max.monto ? f : max), flujoCaja[0]) : null;
@@ -602,23 +600,22 @@ export default function AnalisisPareto() {
       <p className="text-xs text-gray-400 mb-2">Útil como anexo de la oferta y también durante la ejecución</p>
       <div className="mb-6 border border-gray-200 rounded p-3">
         {analizadas.length === 0 && <p className="text-xs text-gray-400 italic">Sube un presupuesto o agrega partidas para poder estimar un cronograma.</p>}
-        {analizadas.length > 0 && plazoTotal === null && (
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-600">¿Cuál es el plazo total estimado de este proyecto, en días?</label>
-            <input type="number" onWheel={(e) => e.currentTarget.blur()} className="w-20 border border-gray-200 rounded px-1 py-0.5 text-right"
-              placeholder="Ej: 60"
-              onChange={(e) => { const v = Number(e.target.value); if (v > 0) setPlazoTotal(v); }} />
-          </div>
-        )}
-        {analizadas.length > 0 && plazoTotal !== null && (
+        {analizadas.length > 0 && (
         <>
         <div className="flex items-center justify-end mb-3">
           <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-500">Plazo total (días)</label>
-            <input type="number" onWheel={(e) => e.currentTarget.blur()} className="w-16 border border-gray-200 rounded px-1 py-0.5 text-right"
-              value={plazoTotal} onChange={(e) => setPlazoTotal(Math.max(1, Number(e.target.value) || 1))} />
+            <label className="text-xs text-gray-500">Plazo total estimado (días)</label>
+            <input type="number" onWheel={(e) => e.currentTarget.blur()} className="w-20 border border-gray-200 rounded px-1 py-0.5 text-right"
+              placeholder="Ej: 60"
+              value={plazoTotal === null ? "" : plazoTotal}
+              onChange={(e) => { const raw = e.target.value; setPlazoTotal(raw === "" ? null : Number(raw)); }} />
           </div>
         </div>
+        {plazoTotal === null && (
+          <p className="text-xs text-gray-400 italic">Escribe el plazo total del proyecto arriba para generar el cronograma.</p>
+        )}
+        {plazoTotal !== null && plazoTotal > 0 && (
+        <>
         <p className="text-xs text-gray-500 mb-3">
           Los días por fase se estiman en proporción al peso de sus partidas dentro del presupuesto total, no a partir de rendimientos reales de cuadrilla. Si ya tienes fechas y duraciones reales de tu propio cronograma (en Primavera, Project o Excel), edita el día de inicio y la duración de cada fase abajo; el resto de los módulos de ejecución usará esos valores en lugar de los calculados automáticamente.
         </p>
@@ -678,6 +675,8 @@ export default function AnalisisPareto() {
         )}
         </>
         )}
+        </>
+        )}
       </div>
 
       <h2 className="text-base font-semibold mt-6 mb-1">3. 📈 Cash Flow</h2>
@@ -721,7 +720,7 @@ export default function AnalisisPareto() {
       <p className="text-xs text-gray-400 mb-2">Ejecución — para usar una vez adjudicado el proyecto</p>
       <div className="mb-6 border border-gray-200 rounded p-3">
         <p className="text-xs text-gray-500 mb-3">
-          Partidas de alto o medio impacto que además corresponden a insumos de entrega larga (equipos, materiales importados o de fabricación especializada), ordenadas por cuándo se necesitan según el cronograma. Son las primeras órdenes de compra a colocar.
+          Partidas de alto o medio impacto económico (clase A y B), ordenadas por cuándo se necesitan según el cronograma. No distinguen todavía si el insumo es de entrega larga o inmediata; úsalas como guía de orden de compra y aplica tu propio criterio sobre cuáles requieren más antelación.
         </p>
         {prioridadesCompra.length === 0 && <p className="text-xs text-gray-400 italic">No se detectaron partidas de compra crítica con la información actual.</p>}
         {prioridadesCompra.map((p, i) => (
