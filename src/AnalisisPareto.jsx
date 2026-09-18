@@ -240,6 +240,7 @@ export default function AnalisisPareto() {
   const partidasMostradas = topN === "todos" ? analizadas : analizadas.slice(0, topN === "90" ? n90 : n80);
   const pctCubierto = partidasMostradas.length ? partidasMostradas[partidasMostradas.length - 1].pctAcum : 0;
 
+  const usaCategoriasReales = analizadas.some((p) => p.categoria);
   const categoriasUnicas = new Set(analizadas.map((p) => p.categoria).filter(Boolean)).size;
   const usarCapitulosParaSchedule = usaCategoriasReales && categoriasUnicas > 1;
   let fasesOrdenadas;
