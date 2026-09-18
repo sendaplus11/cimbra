@@ -34,13 +34,13 @@ const fasePorClase = {
 };
 
 const NAME_KEYS = ["partida", "descripcion", "descripción", "concepto", "item", "actividad"];
-const CODE_KEYS = ["codigo", "código", "cod.", "cod ", "nº", "no.", "n°"];
+const CODE_KEYS = ["cod", "código", "nº", "no.", "n°"];
 const AMOUNT_KEYS_PRIORITY = ["total", "monto", "importe", "subtotal", "costo", "precio"];
 
 function prefijoCodigo(codigo) {
   if (!codigo) return null;
   const partes = String(codigo).trim().split("-");
-  if (partes.length <= 1) return codigo;
+  if (partes.length <= 1) return null;
   const ultima = partes[partes.length - 1].trim();
   if (/^\d+(\.\d+)?$/.test(ultima)) {
     return partes.slice(0, -1).join("-");
@@ -395,11 +395,16 @@ export default function AnalisisPareto() {
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mt-2">Bloque de pre-oferta — para usar antes de presentar la propuesta</p>
       <h2 className="text-base font-semibold mt-2 mb-1">1. 💰 Cost Analysis</h2>
       <p className="text-xs text-gray-400 mb-2">
-        {usaCategoriasReales ? "Capítulos tomados directamente del archivo importado." : "Categorías estimadas por palabras clave (el archivo no traía capítulos propios detectables)."}
+        {usaCategoriasReales ? "Capítulos tomados directamente del archivo importado." : "Disponible solo cuando el presupuesto trae capítulos o códigos jerárquicos propios."}
       </p>
       <div className="mb-6 border border-gray-200 rounded p-3">
-        {costoPorFase.length === 0 && <p className="text-xs text-gray-400 italic">Sube un presupuesto o agrega partidas para ver la distribución por categoría.</p>}
-        {costoPorFase.map((f) => (
+        {analizadas.length === 0 && <p className="text-xs text-gray-400 italic">Sube un presupuesto o agrega partidas para ver la distribución por categoría.</p>}
+        {analizadas.length > 0 && !usaCategoriasReales && (
+          <p className="text-xs text-gray-500 italic">
+            Este presupuesto no trae una estructura de capítulos o códigos jerárquicos identificable, así que no mostramos una distribución por categoría para evitar adivinar. Usa el módulo 2, Cost Drivers, que analiza cada partida individualmente y funciona sin importar la estructura del archivo.
+          </p>
+        )}
+        {usaCategoriasReales && costoPorFase.map((f) => (
           <div key={f.name} className="flex items-center gap-3 mb-2 text-xs">
             <span className="w-52 truncate">{f.name}</span>
             <div className="flex-1 bg-gray-100 rounded h-4 relative overflow-hidden">
