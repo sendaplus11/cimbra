@@ -105,7 +105,7 @@ function CostDriverTooltip({ active, payload }) {
 export default function AnalisisPareto() {
   const [partidas, setPartidas] = useState(initialPartidas);
   const [umbralA, setUmbralA] = useState(80);
-  const [umbralB, setUmbralB] = useState(95);
+  const [umbralB, setUmbralB] = useState(90);
   const [plazoTotal, setPlazoTotal] = useState(null);
   const [periodicidad, setPeriodicidad] = useState("mensual");
   const [inicioManual, setInicioManual] = useState({});
@@ -240,9 +240,10 @@ export default function AnalisisPareto() {
   const partidasMostradas = topN === "todos" ? analizadas : analizadas.slice(0, topN === "90" ? n90 : n80);
   const pctCubierto = partidasMostradas.length ? partidasMostradas[partidasMostradas.length - 1].pctAcum : 0;
 
-  const usaCategoriasReales = analizadas.some((p) => p.categoria);
+  const categoriasUnicas = new Set(analizadas.map((p) => p.categoria).filter(Boolean)).size;
+  const usarCapitulosParaSchedule = usaCategoriasReales && categoriasUnicas > 1;
   let fasesOrdenadas;
-  if (usaCategoriasReales) {
+  if (usarCapitulosParaSchedule) {
     const fasesMap = {};
     const fasesAppearanceOrder = [];
     analizadas.forEach((p) => {
@@ -256,8 +257,8 @@ export default function AnalisisPareto() {
     });
     fasesOrdenadas = fasesAppearanceOrder.map((ph) => fasesMap[ph]);
   } else {
-    // Sin capítulos reales: no se inventa agrupación por palabras clave.
-    // Cada partida aparece en el cronograma con su propio peso económico.
+    // Sin capítulos reales, o con un único capítulo que abarca todo el presupuesto:
+    // no tiene sentido agrupar, cada partida aparece en el cronograma con su propio peso económico.
     fasesOrdenadas = analizadas.map((p) => ({
       name: (p.codigo ? p.codigo + " " : "") + encabezado(p.name, 45),
       monto: p.monto,
@@ -317,7 +318,7 @@ export default function AnalisisPareto() {
   const esLargoPlazo = (name) => LONG_LEAD_KEYWORDS.some((k) => String(name).toLowerCase().includes(k));
 
   const analizadasConFase = analizadas.map((p) => {
-    const fase = usaCategoriasReales ? (p.categoria || "Sin categoría en el archivo") : (p.codigo ? p.codigo + " " : "") + encabezado(p.name, 45);
+    const fase = usarCapitulosParaSchedule ? (p.categoria || "Sin categoría en el archivo") : (p.codigo ? p.codigo + " " : "") + encabezado(p.name, 45);
     const inicioFase = faseInicioMap[fase] ?? 0;
     const urgencia = plazoTotal ? 1 - inicioFase / plazoTotal : 0;
     const criticidad = p.pctInd * 0.7 + urgencia * 100 * 0.3;
@@ -453,12 +454,12 @@ export default function AnalisisPareto() {
       <div className="flex items-center gap-6 mb-4 bg-gray-50 p-3 rounded border border-gray-200">
         <div className="flex items-center gap-2">
           <label className="text-xs text-gray-500">Umbral clase A (%)</label>
-          <input type="number" className="w-16 border border-gray-200 rounded px-1 py-0.5 text-right"
+          <input type="number" onWheel={(e) => e.currentTarget.blur()} className="w-16 border border-gray-200 rounded px-1 py-0.5 text-right"
             value={umbralA} onChange={(e) => setUmbralA(Number(e.target.value) || 0)} />
         </div>
         <div className="flex items-center gap-2">
           <label className="text-xs text-gray-500">Umbral clase B (%)</label>
-          <input type="number" className="w-16 border border-gray-200 rounded px-1 py-0.5 text-right"
+          <input type="number" onWheel={(e) => e.currentTarget.blur()} className="w-16 border border-gray-200 rounded px-1 py-0.5 text-right"
             value={umbralB} onChange={(e) => setUmbralB(Number(e.target.value) || 0)} />
         </div>
         <div className="ml-auto text-right flex items-center gap-4">
@@ -554,7 +555,7 @@ export default function AnalisisPareto() {
                 title={p.name}
                 value={p.name} onChange={(e) => updatePartida(p.id, "name", e.target.value)} />
             </div>
-            <input type="number" className="col-span-2 border border-gray-200 rounded px-1 py-0.5 text-right"
+            <input type="number" onWheel={(e) => e.currentTarget.blur()} className="col-span-2 border border-gray-200 rounded px-1 py-0.5 text-right"
               value={p.monto} onChange={(e) => updatePartida(p.id, "monto", e.target.value)} />
             <span className="col-span-1 text-right text-gray-500">{p.pctInd.toFixed(1)}%</span>
             <span className="col-span-2 text-right text-gray-500">{p.pctAcum.toFixed(1)}%</span>
@@ -603,7 +604,7 @@ export default function AnalisisPareto() {
         {analizadas.length > 0 && plazoTotal === null && (
           <div className="flex items-center gap-2">
             <label className="text-xs text-gray-600">¿Cuál es el plazo total estimado de este proyecto, en días?</label>
-            <input type="number" className="w-20 border border-gray-200 rounded px-1 py-0.5 text-right"
+            <input type="number" onWheel={(e) => e.currentTarget.blur()} className="w-20 border border-gray-200 rounded px-1 py-0.5 text-right"
               placeholder="Ej: 60"
               onChange={(e) => { const v = Number(e.target.value); if (v > 0) setPlazoTotal(v); }} />
           </div>
@@ -613,7 +614,7 @@ export default function AnalisisPareto() {
         <div className="flex items-center justify-end mb-3">
           <div className="flex items-center gap-2">
             <label className="text-xs text-gray-500">Plazo total (días)</label>
-            <input type="number" className="w-16 border border-gray-200 rounded px-1 py-0.5 text-right"
+            <input type="number" onWheel={(e) => e.currentTarget.blur()} className="w-16 border border-gray-200 rounded px-1 py-0.5 text-right"
               value={plazoTotal} onChange={(e) => setPlazoTotal(Math.max(1, Number(e.target.value) || 1))} />
           </div>
         </div>
@@ -639,7 +640,7 @@ export default function AnalisisPareto() {
                     <span className="font-medium">{f.name}</span>
                     <span className="flex items-center gap-2 text-gray-500">
                       Día
-                      <input type="number" className="w-14 border border-gray-200 rounded px-1 py-0.5 text-right"
+                      <input type="number" onWheel={(e) => e.currentTarget.blur()} className="w-14 border border-gray-200 rounded px-1 py-0.5 text-right"
                         value={f.inicio}
                         onChange={(e) => setInicioManual((m) => ({ ...m, [f.name]: Math.max(0, Number(e.target.value) || 0) }))} />
                       {f.esManualInicio && (
@@ -649,7 +650,7 @@ export default function AnalisisPareto() {
                         </button>
                       )}
                       – Día {f.fin} (
-                      <input type="number" className="w-14 border border-gray-200 rounded px-1 py-0.5 text-right"
+                      <input type="number" onWheel={(e) => e.currentTarget.blur()} className="w-14 border border-gray-200 rounded px-1 py-0.5 text-right"
                         value={f.dias}
                         onChange={(e) => setDuracionManual((m) => ({ ...m, [f.name]: Math.max(1, Number(e.target.value) || 1) }))} />
                       días)
