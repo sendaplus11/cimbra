@@ -107,6 +107,7 @@ export default function AnalisisPareto() {
   const [umbralA, setUmbralA] = useState(80);
   const [umbralB, setUmbralB] = useState(90);
   const [plazoTotal, setPlazoTotal] = useState(null);
+  const [unidadTiempo, setUnidadTiempo] = useState("dias");
   const [periodicidad, setPeriodicidad] = useState("mensual");
   const [inicioManual, setInicioManual] = useState({});
   const [duracionManual, setDuracionManual] = useState({});
@@ -286,6 +287,11 @@ export default function AnalisisPareto() {
     }
   }
   const domainMax = Math.max(plazoTotal, ...cronograma.map((f) => f.fin), 1);
+  const diasPorUnidad = unidadTiempo === "semanas" ? 7 : unidadTiempo === "años" ? 365 : 1;
+  const unidadLabel = unidadTiempo === "semanas" ? "semanas" : unidadTiempo === "años" ? "años" : "días";
+  const aUnidad = (dias) => Math.round((dias / diasPorUnidad) * 10) / 10;
+  const aDias = (valorUnidad) => Math.round(valorUnidad * diasPorUnidad);
+  const cronogramaDisplay = cronograma.map((f) => ({ ...f, inicio: aUnidad(f.inicio), dias: aUnidad(f.dias) }));
 
   function calcularFlujo(periodDays, label) {
     const n = Math.max(1, Math.ceil(plazoTotal / periodDays));
@@ -571,7 +577,6 @@ export default function AnalisisPareto() {
         {analizadas.length === 0 && (
           <p className="text-sm text-gray-400 italic py-4">No hay partidas cargadas todavía.</p>
         )}
-        <button onClick={addPartida} className="text-xs text-blue-600 hover:underline mt-2">+ agregar partida</button>
       </div>
 
       <div className="mb-6">
@@ -602,13 +607,21 @@ export default function AnalisisPareto() {
         {analizadas.length === 0 && <p className="text-xs text-gray-400 italic">Sube un presupuesto o agrega partidas para poder estimar un cronograma.</p>}
         {analizadas.length > 0 && (
         <>
-        <div className="flex items-center justify-end mb-3">
+        <div className="flex items-center justify-end gap-4 mb-3">
           <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-500">Plazo total estimado (días)</label>
+            <label className="text-xs text-gray-500">Unidad</label>
+            <select className="border border-gray-200 rounded px-1 py-0.5 text-xs" value={unidadTiempo} onChange={(e) => setUnidadTiempo(e.target.value)}>
+              <option value="dias">Días</option>
+              <option value="semanas">Semanas</option>
+              <option value="años">Años</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-500">Plazo total estimado ({unidadLabel})</label>
             <input type="number" onWheel={(e) => e.currentTarget.blur()} className="w-20 border border-gray-200 rounded px-1 py-0.5 text-right"
               placeholder="Ej: 60"
-              value={plazoTotal === null ? "" : plazoTotal}
-              onChange={(e) => { const raw = e.target.value; setPlazoTotal(raw === "" ? null : Number(raw)); }} />
+              value={plazoTotal === null ? "" : aUnidad(plazoTotal)}
+              onChange={(e) => { const raw = e.target.value; setPlazoTotal(raw === "" ? null : aDias(Number(raw))); }} />
           </div>
         </div>
         {plazoTotal === null && (
@@ -622,11 +635,11 @@ export default function AnalisisPareto() {
         {cronograma.length > 0 && (
           <>
             <ResponsiveContainer width="100%" height={cronograma.length * (cronograma.length > 25 ? 18 : 40) + 40}>
-              <BarChart data={cronograma} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+              <BarChart data={cronogramaDisplay} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis type="number" domain={[0, domainMax]} tick={{ fontSize: 11 }} label={{ value: "días", position: "insideBottom", offset: -2, fontSize: 11 }} />
+                <XAxis type="number" domain={[0, aUnidad(domainMax)]} tick={{ fontSize: 11 }} label={{ value: unidadLabel, position: "insideBottom", offset: -2, fontSize: 11 }} />
                 <YAxis type="category" dataKey="name" width={190} tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v, n) => (n === "dias" ? v + " días" : null)} labelFormatter={(l) => l} />
+                <Tooltip formatter={(v, n) => (n === "dias" ? v + " " + unidadLabel : null)} labelFormatter={(l) => l} />
                 <Bar dataKey="inicio" stackId="g" fill="transparent" />
                 <Bar dataKey="dias" stackId="g" fill="#3A5A73" radius={[0, 4, 4, 0]} />
               </BarChart>
@@ -637,21 +650,21 @@ export default function AnalisisPareto() {
                   <div className="flex items-center justify-between text-xs mb-1">
                     <span className="font-medium">{f.name}</span>
                     <span className="flex items-center gap-2 text-gray-500">
-                      Día
+                      {unidadTiempo === "semanas" ? "Semana" : unidadTiempo === "años" ? "Año" : "Día"}
                       <input type="number" onWheel={(e) => e.currentTarget.blur()} className="w-14 border border-gray-200 rounded px-1 py-0.5 text-right"
-                        value={f.inicio}
-                        onChange={(e) => setInicioManual((m) => ({ ...m, [f.name]: Math.max(0, Number(e.target.value) || 0) }))} />
+                        value={aUnidad(f.inicio)}
+                        onChange={(e) => setInicioManual((m) => ({ ...m, [f.name]: Math.max(0, aDias(Number(e.target.value) || 0)) }))} />
                       {f.esManualInicio && (
                         <button className="text-blue-600 hover:underline"
                           onClick={() => setInicioManual((m) => { const c = { ...m }; delete c[f.name]; return c; })}>
                           inicio auto
                         </button>
                       )}
-                      – Día {f.fin} (
+                      – {unidadTiempo === "semanas" ? "Semana" : unidadTiempo === "años" ? "Año" : "Día"} {aUnidad(f.fin)} (
                       <input type="number" onWheel={(e) => e.currentTarget.blur()} className="w-14 border border-gray-200 rounded px-1 py-0.5 text-right"
-                        value={f.dias}
-                        onChange={(e) => setDuracionManual((m) => ({ ...m, [f.name]: Math.max(1, Number(e.target.value) || 1) }))} />
-                      días)
+                        value={aUnidad(f.dias)}
+                        onChange={(e) => setDuracionManual((m) => ({ ...m, [f.name]: Math.max(1, aDias(Number(e.target.value) || 1)) }))} />
+                      {unidadLabel})
                       {f.esManualDuracion && (
                         <button className="text-blue-600 hover:underline"
                           onClick={() => setDuracionManual((m) => { const c = { ...m }; delete c[f.name]; return c; })}>
