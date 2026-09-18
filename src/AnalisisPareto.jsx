@@ -236,21 +236,30 @@ export default function AnalisisPareto() {
   const partidasMostradas = topN === "todos" ? analizadas : analizadas.slice(0, topN === "90" ? n90 : n80);
   const pctCubierto = partidasMostradas.length ? partidasMostradas[partidasMostradas.length - 1].pctAcum : 0;
 
-  const fasesMap = {};
-  const fasesAppearanceOrder = [];
   const usaCategoriasReales = analizadas.some((p) => p.categoria);
-  analizadas.forEach((p) => {
-    const ph = usaCategoriasReales ? (p.categoria || "Sin categoría en el archivo") : classifyPhase(p.name);
-    if (!fasesMap[ph]) {
-      fasesMap[ph] = { name: ph, monto: 0, partidas: [] };
-      fasesAppearanceOrder.push(ph);
-    }
-    fasesMap[ph].monto += p.monto;
-    fasesMap[ph].partidas.push(p);
-  });
-  const fasesOrdenadas = usaCategoriasReales
-    ? fasesAppearanceOrder.map((ph) => fasesMap[ph])
-    : PHASE_ORDER.filter((ph) => fasesMap[ph]).map((ph) => fasesMap[ph]);
+  let fasesOrdenadas;
+  if (usaCategoriasReales) {
+    const fasesMap = {};
+    const fasesAppearanceOrder = [];
+    analizadas.forEach((p) => {
+      const ph = p.categoria || "Sin categoría en el archivo";
+      if (!fasesMap[ph]) {
+        fasesMap[ph] = { name: ph, monto: 0, partidas: [] };
+        fasesAppearanceOrder.push(ph);
+      }
+      fasesMap[ph].monto += p.monto;
+      fasesMap[ph].partidas.push(p);
+    });
+    fasesOrdenadas = fasesAppearanceOrder.map((ph) => fasesMap[ph]);
+  } else {
+    // Sin capítulos reales: no se inventa agrupación por palabras clave.
+    // Cada partida aparece en el cronograma con su propio peso económico.
+    fasesOrdenadas = analizadas.map((p) => ({
+      name: (p.codigo ? p.codigo + " " : "") + encabezado(p.name, 45),
+      monto: p.monto,
+      partidas: [p],
+    }));
+  }
   let cursorDia = 0;
   const cronograma = fasesOrdenadas.map((f, i) => {
     const pct = total ? f.monto / total : 0;
@@ -304,7 +313,7 @@ export default function AnalisisPareto() {
   const esLargoPlazo = (name) => LONG_LEAD_KEYWORDS.some((k) => String(name).toLowerCase().includes(k));
 
   const analizadasConFase = analizadas.map((p) => {
-    const fase = usaCategoriasReales ? (p.categoria || "Sin categoría en el archivo") : classifyPhase(p.name);
+    const fase = usaCategoriasReales ? (p.categoria || "Sin categoría en el archivo") : (p.codigo ? p.codigo + " " : "") + encabezado(p.name, 45);
     const inicioFase = faseInicioMap[fase] ?? 0;
     const urgencia = plazoTotal ? 1 - inicioFase / plazoTotal : 0;
     const criticidad = p.pctInd * 0.7 + urgencia * 100 * 0.3;
@@ -604,7 +613,7 @@ export default function AnalisisPareto() {
         </p>
         {cronograma.length > 0 && (
           <>
-            <ResponsiveContainer width="100%" height={cronograma.length * 40 + 40}>
+            <ResponsiveContainer width="100%" height={cronograma.length * (cronograma.length > 25 ? 18 : 40) + 40}>
               <BarChart data={cronograma} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis type="number" domain={[0, domainMax]} tick={{ fontSize: 11 }} label={{ value: "días", position: "insideBottom", offset: -2, fontSize: 11 }} />
@@ -643,9 +652,14 @@ export default function AnalisisPareto() {
                       )}
                     </span>
                   </div>
-                  <p className="text-xs text-gray-500">
-                    {resumirNombres(f.partidas, 8, (p) => (p.codigo ? p.codigo + " " : "") + encabezado(p.name) + (p.clase === "A" ? " (prioridad alta)" : ""))}
-                  </p>
+                  {f.partidas.length > 1 && (
+                    <p className="text-xs text-gray-500">
+                      {resumirNombres(f.partidas, 8, (p) => (p.codigo ? p.codigo + " " : "") + encabezado(p.name) + (p.clase === "A" ? " (prioridad alta)" : ""))}
+                    </p>
+                  )}
+                  {f.partidas.length === 1 && f.partidas[0].clase === "A" && (
+                    <p className="text-xs text-gray-500">Prioridad alta (clase A)</p>
+                  )}
                 </div>
               ))}
             </div>
