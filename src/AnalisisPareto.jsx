@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ComposedChart, BarChart, Bar, Cell, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer } from "recharts";
 import * as XLSX from "xlsx";
+import { MODULOS as M } from "./textos.js";
 
 let idCounter = 1;
 const newId = () => idCounter++;
@@ -107,7 +108,7 @@ export default function AnalisisPareto() {
   const [umbralA, setUmbralA] = useState(80);
   const [umbralB, setUmbralB] = useState(90);
   const [plazoTotal, setPlazoTotal] = useState(null);
-  const [unidadTiempo, setUnidadTiempo] = useState("dias");
+  const [unidadTiempo, setUnidadTiempo] = useState("meses");
   const [periodicidad, setPeriodicidad] = useState("mensual");
   const [inicioManual, setInicioManual] = useState({});
   const [duracionManual, setDuracionManual] = useState({});
@@ -178,7 +179,7 @@ export default function AnalisisPareto() {
           const codigo = codigoIdx !== -1 && row[codigoIdx] ? String(row[codigoIdx]).trim() : null;
           if (nombreLimpio && !isNaN(amount) && amount > 0) {
             const categoria = codigo ? prefijoCodigo(codigo) : categoriaActual;
-            nuevas.push({ id: newId(), name: nombreLimpio, monto: amount, codigo, categoria });
+            nuevas.push({ id: newId(), orden: nuevas.length, name: nombreLimpio, monto: amount, codigo, categoria });
           }
         }
         if (nuevas.length === 0) {
@@ -193,7 +194,7 @@ export default function AnalisisPareto() {
         const totalCategorias = new Set(nuevas.map((p) => p.categoria).filter(Boolean)).size;
         setImportInfo(
           nuevas.length + " partidas importadas correctamente." +
-          (tieneCategoriasReales ? " Se detectaron " + totalCategorias + " capítulos propios del archivo y se usarán en Cost Analysis." : "")
+          (tieneCategoriasReales ? " Se detectaron " + totalCategorias + " capítulos propios del archivo y se usarán para agrupar el " + M.cronograma + "." : "")
         );
       } catch (err) {
         setImportError("No se pudo leer el archivo. Verifica que sea un Excel o CSV válido.");
@@ -202,14 +203,6 @@ export default function AnalisisPareto() {
     reader.readAsArrayBuffer(file);
   };
 
-  const updatePartida = (id, field, value) => {
-    setPartidas((ps) =>
-      ps.map((p) => (p.id !== id ? p : { ...p, [field]: field === "monto" ? Number(value) || 0 : value }))
-    );
-  };
-
-  const addPartida = () => setPartidas((ps) => [...ps, { id: newId(), name: "Nueva partida", monto: 0 }]);
-  const removePartida = (id) => setPartidas((ps) => ps.filter((p) => p.id !== id));
 
   const total = partidas.reduce((s, p) => s + p.monto, 0);
 
@@ -257,7 +250,10 @@ export default function AnalisisPareto() {
       fasesMap[ph].monto += p.monto;
       fasesMap[ph].partidas.push(p);
     });
-    fasesOrdenadas = fasesAppearanceOrder.map((ph) => fasesMap[ph]);
+    // Los capítulos se ordenan como aparecen en el archivo original (orden constructivo del
+    // presupuesto), no por monto: el cronograma debe respetar la secuencia de obra.
+    const primeraAparicion = (ph) => Math.min(...fasesMap[ph].partidas.map((p) => p.orden ?? 0));
+    fasesOrdenadas = fasesAppearanceOrder.sort((x, y) => primeraAparicion(x) - primeraAparicion(y)).map((ph) => fasesMap[ph]);
   } else {
     // Sin capítulos reales, o con un único capítulo que abarca todo el presupuesto:
     // no tiene sentido agrupar, cada partida aparece en el cronograma con su propio peso económico.
@@ -287,10 +283,21 @@ export default function AnalisisPareto() {
     }
   }
   const domainMax = Math.max(plazoTotal, ...cronograma.map((f) => f.fin), 1);
-  const diasPorUnidad = unidadTiempo === "semanas" ? 7 : unidadTiempo === "años" ? 365 : 1;
-  const unidadLabel = unidadTiempo === "semanas" ? "semanas" : unidadTiempo === "años" ? "años" : "días";
+  // El motor calcula siempre en días; las unidades solo cambian la presentación.
+  // Mes = 30 días y año = 365 días, igual que en el Flujo de Caja.
+  const DIAS_UNIDAD = { semanas: 7, meses: 30, "años": 365 };
+  const NOMBRE_UNIDAD = { semanas: "semanas", meses: "meses", "años": "años" };
+  const aniosDisponible = plazoTotal === null || plazoTotal >= 365;
+  const unidadEfectiva = unidadTiempo === "años" && !aniosDisponible ? "meses" : unidadTiempo;
+  const diasPorUnidad = DIAS_UNIDAD[unidadEfectiva];
+  const unidadLabel = NOMBRE_UNIDAD[unidadEfectiva];
   const aUnidad = (dias) => Math.round((dias / diasPorUnidad) * 10) / 10;
   const aDias = (valorUnidad) => Math.round(valorUnidad * diasPorUnidad);
+  // La edición por fase siempre es en semanas: nadie planifica una fase de "1,4 meses".
+  const aSemanas = (dias) => Math.round((dias / 7) * 10) / 10;
+  const semanasADias = (sem) => Math.round(sem * 7);
+  const semanaDeDia = (dia) => Math.floor(dia / 7) + 1;
+  const plazoTexto = (dias) => aUnidad(dias).toLocaleString("es") + " " + unidadLabel;
   const cronogramaDisplay = cronograma.map((f) => ({ ...f, inicio: aUnidad(f.inicio), dias: aUnidad(f.dias) }));
 
   function calcularFlujo(periodDays, label) {
@@ -351,7 +358,7 @@ export default function AnalisisPareto() {
     ws["!cols"] = [{ wch: 10 }, { wch: 40 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 8 }];
     XLSX.utils.sheet_add_json(ws, [
       {},
-      { Ranking: "Review Compression", Partida: reviewCompression.toFixed(1) + "×" },
+      { Ranking: M.compresionRevision, Partida: reviewCompression.toFixed(1) + "×" },
       { Ranking: "Partidas para 80%", Partida: n80, Monto: pct80DePartidas.toFixed(0) + "%" },
       { Ranking: "Partidas para 90%", Partida: n90, Monto: (analizadas.length ? (n90/analizadas.length*100) : 0).toFixed(0) + "%" },
     ], { origin: -1, skipHeader: true });
@@ -360,6 +367,8 @@ export default function AnalisisPareto() {
 
     const cronoRows = cronograma.map((f) => ({
       Fase: f.name,
+      "Semana inicio": semanaDeDia(f.inicio),
+      "Duración (semanas)": aSemanas(f.dias),
       "Día inicio": f.inicio,
       "Día fin": f.fin,
       "Duración (días)": f.dias,
@@ -367,16 +376,16 @@ export default function AnalisisPareto() {
       Partidas: f.partidas.map((p) => p.name).join(", "),
     }));
     const ws2 = XLSX.utils.json_to_sheet(cronoRows);
-    ws2["!cols"] = [{ wch: 30 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 60 }];
-    XLSX.utils.book_append_sheet(wb, ws2, "Cronograma");
+    ws2["!cols"] = [{ wch: 30 }, { wch: 12 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 60 }];
+    XLSX.utils.book_append_sheet(wb, ws2, "Cronograma de Obra");
 
     const flujoSemanal = calcularFlujo(7, "Semana");
     const flujoMensual = calcularFlujo(30, "Mes");
     const flujoAnual = calcularFlujo(365, "Año");
     [
-      ["Flujo Semanal", flujoSemanal],
-      ["Flujo Mensual", flujoMensual],
-      ["Flujo Anual", flujoAnual],
+      ["Flujo de Caja Semanal", flujoSemanal],
+      ["Flujo de Caja Mensual", flujoMensual],
+      ["Flujo de Caja Anual", flujoAnual],
     ].forEach(([sheetName, filas]) => {
       const filaRows = filas.map((f) => ({
         Periodo: f.periodo,
@@ -393,17 +402,20 @@ export default function AnalisisPareto() {
     wsCurva["!cols"] = [{ wch: 14 }, { wch: 24 }];
     XLSX.utils.book_append_sheet(wb, wsCurva, "Curva de Avance");
 
-    const compraRows = prioridadesCompra.map((p, i) => ({ Prioridad: i + 1, Partida: p.name, "Día requerido": p.inicioFase, Fase: p.fase, Clase: p.clase }));
+    const compraRows = prioridadesCompra.map((p, i) => ({ Prioridad: i + 1, Partida: p.name, "Semana requerida": semanaDeDia(p.inicioFase), "Día requerido": p.inicioFase, Fase: p.fase, Clase: p.clase }));
     const wsCompra = XLSX.utils.json_to_sheet(compraRows);
-    wsCompra["!cols"] = [{ wch: 10 }, { wch: 40 }, { wch: 14 }, { wch: 32 }, { wch: 8 }];
-    XLSX.utils.book_append_sheet(wb, wsCompra, "Prioridades de Compra");
+    wsCompra["!cols"] = [{ wch: 10 }, { wch: 40 }, { wch: 16 }, { wch: 14 }, { wch: 32 }, { wch: 8 }];
+    XLSX.utils.book_append_sheet(wb, wsCompra, M.procura);
 
-    const criticaRows = actividadesCriticas.map((p, i) => ({ Prioridad: i + 1, Partida: p.name, "% del presupuesto": Number(p.pctInd.toFixed(2)), Fase: p.fase, "Día de inicio": p.inicioFase }));
-    const wsCritica = XLSX.utils.json_to_sheet(criticaRows);
-    wsCritica["!cols"] = [{ wch: 10 }, { wch: 40 }, { wch: 16 }, { wch: 32 }, { wch: 12 }];
-    XLSX.utils.book_append_sheet(wb, wsCritica, "Actividades Criticas");
+    // Actividades Críticas está en pausa: no se exporta mientras el módulo no aporte información propia.
+    if (MOSTRAR_CRITICAL_ACTIVITIES) {
+      const criticaRows = actividadesCriticas.map((p, i) => ({ Prioridad: i + 1, Partida: p.name, "% del presupuesto": Number(p.pctInd.toFixed(2)), Fase: p.fase, "Día de inicio": p.inicioFase }));
+      const wsCritica = XLSX.utils.json_to_sheet(criticaRows);
+      wsCritica["!cols"] = [{ wch: 10 }, { wch: 40 }, { wch: 16 }, { wch: 32 }, { wch: 12 }];
+      XLSX.utils.book_append_sheet(wb, wsCritica, M.actividadesCriticas);
+    }
 
-    XLSX.writeFile(wb, "project-intelligence-report.xlsx");
+    XLSX.writeFile(wb, "cimbra-reporte.xlsx");
   };
 
   return (
@@ -428,12 +440,12 @@ export default function AnalisisPareto() {
 
       {MOSTRAR_COST_ANALYSIS && (
         <>
-          <h2 className="text-base font-semibold mt-2 mb-1">💰 Cost Analysis</h2>
+          <h2 className="text-base font-semibold mt-2 mb-1">💰 {M.analisisCostos}</h2>
           {analizadas.length === 0 && (
-            <p className="text-xs text-gray-400 italic mb-6">Sube un presupuesto o agrega partidas para ver la distribución por categoría.</p>
+            <p className="text-xs text-gray-400 italic mb-6">Sube un presupuesto para ver la distribución por categoría.</p>
           )}
           {analizadas.length > 0 && !usaCategoriasReales && (
-            <p className="text-xs text-gray-400 italic mb-6">No disponible: este presupuesto no trae capítulos ni códigos jerárquicos identificables. Usa Cost Drivers, que funciona sin importar la estructura del archivo.</p>
+            <p className="text-xs text-gray-400 italic mb-6">No disponible: este presupuesto no trae capítulos ni códigos jerárquicos identificables. Usa {M.costDrivers}, que funciona sin importar la estructura del archivo.</p>
           )}
           {usaCategoriasReales && (
             <>
@@ -454,7 +466,7 @@ export default function AnalisisPareto() {
         </>
       )}
 
-      <h2 className="text-base font-semibold mt-2 mb-2">1. 📊 Cost Drivers</h2>
+      <h2 className="text-base font-semibold mt-2 mb-2">1. 📊 {M.costDrivers}</h2>
 
       <div className="flex items-center gap-6 mb-4 bg-gray-50 p-3 rounded border border-gray-200">
         <div className="flex items-center gap-2">
@@ -482,7 +494,7 @@ export default function AnalisisPareto() {
       <div className="mb-4 border border-blue-200 rounded p-3 bg-blue-50">
         <div className="flex items-center justify-between mb-1">
           <span className="text-sm font-medium text-blue-900">
-            Review Compression: {reviewCompression.toFixed(1)}×
+            {M.compresionRevision}: {reviewCompression.toFixed(1)}×
           </span>
           <span className="text-xs text-blue-900">
             {n80} de {analizadas.length} partidas ({pct80DePartidas.toFixed(0)}%) explican el 80% del valor
@@ -499,7 +511,7 @@ export default function AnalisisPareto() {
 
       <div className="mb-6 border border-gray-200 rounded p-2">
         {analizadas.length === 0 ? (
-          <p className="text-sm text-gray-400 italic text-center py-16">Sube un presupuesto o agrega partidas manualmente para ver el análisis.</p>
+          <p className="text-sm text-gray-400 italic text-center py-16">Sube un presupuesto para ver el análisis.</p>
         ) : (
           <>
             <div className="flex items-center gap-4 px-2 pt-1 pb-2 text-xs text-gray-500">
@@ -556,12 +568,9 @@ export default function AnalisisPareto() {
             <span className="col-span-1 text-gray-400">{p.rank}</span>
             <div className="col-span-4 flex items-baseline gap-1.5 min-w-0">
               {p.codigo && <span className="font-mono text-[11px] text-gray-400 shrink-0">{p.codigo}</span>}
-              <input className="border-none bg-transparent focus:outline-none focus:bg-gray-50 rounded px-1 min-w-0 flex-1"
-                title={p.name}
-                value={p.name} onChange={(e) => updatePartida(p.id, "name", e.target.value)} />
+              <span className="px-1 min-w-0 flex-1 truncate" title={p.name}>{p.name}</span>
             </div>
-            <input type="number" onWheel={(e) => e.currentTarget.blur()} className="col-span-2 border border-gray-200 rounded px-1 py-0.5 text-right"
-              value={p.monto} onChange={(e) => updatePartida(p.id, "monto", e.target.value)} />
+            <span className="col-span-2 text-right tabular-nums">{fmt(p.monto)}</span>
             <span className="col-span-1 text-right text-gray-500">{p.pctInd.toFixed(1)}%</span>
             <span className="col-span-2 text-right text-gray-500">{p.pctAcum.toFixed(1)}%</span>
             <span className="col-span-1 text-center">
@@ -569,7 +578,7 @@ export default function AnalisisPareto() {
                 {p.clase}
               </span>
             </span>
-            <button onClick={() => removePartida(p.id)} className="col-span-1 text-gray-400 hover:text-red-500 text-right">✕</button>
+            <span className="col-span-1"></span>
           </div>
         ))}
         </>
@@ -601,25 +610,26 @@ export default function AnalisisPareto() {
         )}
       </div>
 
-      <h2 className="text-base font-semibold mt-8 mb-1">2. 🏗️ Construction Schedule</h2>
+      <h2 className="text-base font-semibold mt-8 mb-1">2. 🏗️ {M.cronograma}</h2>
       <p className="text-xs text-gray-400 mb-2">Útil como anexo de la oferta y también durante la ejecución</p>
       <div className="mb-6 border border-gray-200 rounded p-3">
-        {analizadas.length === 0 && <p className="text-xs text-gray-400 italic">Sube un presupuesto o agrega partidas para poder estimar un cronograma.</p>}
+        {analizadas.length === 0 && <p className="text-xs text-gray-400 italic">Sube un presupuesto para poder estimar un cronograma.</p>}
         {analizadas.length > 0 && (
         <>
         <div className="flex items-center justify-end gap-4 mb-3">
           <div className="flex items-center gap-2">
             <label className="text-xs text-gray-500">Unidad</label>
-            <select className="border border-gray-200 rounded px-1 py-0.5 text-xs" value={unidadTiempo} onChange={(e) => setUnidadTiempo(e.target.value)}>
-              <option value="dias">Días</option>
+            <select className="border border-gray-200 rounded px-1 py-0.5 text-xs" value={unidadEfectiva} onChange={(e) => setUnidadTiempo(e.target.value)}>
               <option value="semanas">Semanas</option>
-              <option value="años">Años</option>
+              <option value="meses">Meses</option>
+              <option value="años" disabled={!aniosDisponible}>Años{aniosDisponible ? "" : " (plazo menor a 1 año)"}</option>
             </select>
           </div>
           <div className="flex items-center gap-2">
             <label className="text-xs text-gray-500">Plazo total estimado ({unidadLabel})</label>
             <input type="number" onWheel={(e) => e.currentTarget.blur()} className="w-20 border border-gray-200 rounded px-1 py-0.5 text-right"
-              placeholder="Ej: 60"
+              placeholder={unidadEfectiva === "semanas" ? "Ej: 36" : unidadEfectiva === "meses" ? "Ej: 8" : "Ej: 2"}
+              step="any"
               value={plazoTotal === null ? "" : aUnidad(plazoTotal)}
               onChange={(e) => { const raw = e.target.value; setPlazoTotal(raw === "" ? null : aDias(Number(raw))); }} />
           </div>
@@ -630,7 +640,7 @@ export default function AnalisisPareto() {
         {plazoTotal !== null && plazoTotal > 0 && (
         <>
         <p className="text-xs text-gray-500 mb-3">
-          Los días por fase se estiman en proporción al peso de sus partidas dentro del presupuesto total, no a partir de rendimientos reales de cuadrilla. Si ya tienes fechas y duraciones reales de tu propio cronograma (en Primavera, Project o Excel), edita el día de inicio y la duración de cada fase abajo; el resto de los módulos de ejecución usará esos valores en lugar de los calculados automáticamente.
+          La duración de cada fase se estima en proporción al peso de sus partidas dentro del presupuesto total, no a partir de rendimientos reales de cuadrilla. Si ya tienes fechas y duraciones reales de tu propio cronograma (en Primavera, Project o Excel), edita la semana de inicio y la duración en semanas de cada fase abajo; el {M.flujoCaja} y las {M.procura} usarán esos valores en lugar de los calculados automáticamente.
         </p>
         {cronograma.length > 0 && (
           <>
@@ -650,21 +660,21 @@ export default function AnalisisPareto() {
                   <div className="flex items-center justify-between text-xs mb-1">
                     <span className="font-medium">{f.name}</span>
                     <span className="flex items-center gap-2 text-gray-500">
-                      {unidadTiempo === "semanas" ? "Semana" : unidadTiempo === "años" ? "Año" : "Día"}
-                      <input type="number" onWheel={(e) => e.currentTarget.blur()} className="w-14 border border-gray-200 rounded px-1 py-0.5 text-right"
-                        value={aUnidad(f.inicio)}
-                        onChange={(e) => setInicioManual((m) => ({ ...m, [f.name]: Math.max(0, aDias(Number(e.target.value) || 0)) }))} />
+                      Inicio (sem.)
+                      <input type="number" step="any" onWheel={(e) => e.currentTarget.blur()} className="w-14 border border-gray-200 rounded px-1 py-0.5 text-right"
+                        value={aSemanas(f.inicio)}
+                        onChange={(e) => setInicioManual((m) => ({ ...m, [f.name]: Math.max(0, semanasADias(Number(e.target.value) || 0)) }))} />
                       {f.esManualInicio && (
                         <button className="text-blue-600 hover:underline"
                           onClick={() => setInicioManual((m) => { const c = { ...m }; delete c[f.name]; return c; })}>
                           inicio auto
                         </button>
                       )}
-                      – {unidadTiempo === "semanas" ? "Semana" : unidadTiempo === "años" ? "Año" : "Día"} {aUnidad(f.fin)} (
-                      <input type="number" onWheel={(e) => e.currentTarget.blur()} className="w-14 border border-gray-200 rounded px-1 py-0.5 text-right"
-                        value={aUnidad(f.dias)}
-                        onChange={(e) => setDuracionManual((m) => ({ ...m, [f.name]: Math.max(1, aDias(Number(e.target.value) || 1)) }))} />
-                      {unidadLabel})
+                      Duración (sem.)
+                      <input type="number" step="any" onWheel={(e) => e.currentTarget.blur()} className="w-14 border border-gray-200 rounded px-1 py-0.5 text-right"
+                        value={aSemanas(f.dias)}
+                        onChange={(e) => setDuracionManual((m) => ({ ...m, [f.name]: Math.max(1, semanasADias(Number(e.target.value) || 1)) }))} />
+                      <span className="text-gray-400">→ termina sem. {aSemanas(f.fin)}</span>
                       {f.esManualDuracion && (
                         <button className="text-blue-600 hover:underline"
                           onClick={() => setDuracionManual((m) => { const c = { ...m }; delete c[f.name]; return c; })}>
@@ -692,12 +702,12 @@ export default function AnalisisPareto() {
         )}
       </div>
 
-      <h2 className="text-base font-semibold mt-6 mb-1">3. 📈 Cash Flow</h2>
+      <h2 className="text-base font-semibold mt-6 mb-1">3. 📈 {M.flujoCaja}</h2>
       <p className="text-xs text-gray-400 mb-2">Útil como anexo de la oferta y también durante la ejecución</p>
       <div className="mb-6 border border-gray-200 rounded p-3">
         {(analizadas.length === 0 || plazoTotal === null) ? (
           <p className="text-xs text-gray-400 italic">
-            {analizadas.length === 0 ? "Sube un presupuesto para ver el flujo de caja." : "Define el plazo total en Construction Schedule (módulo 3) para poder calcular el flujo de caja."}
+            {analizadas.length === 0 ? "Sube un presupuesto para ver el flujo de caja." : "Define el plazo total en " + M.cronograma + " (módulo 2) para poder calcular el flujo de caja."}
           </p>
         ) : (
         <>
@@ -729,7 +739,7 @@ export default function AnalisisPareto() {
         )}
       </div>
 
-      <h2 className="text-base font-semibold mt-6 mb-1">4. 🛒 Procurement Priorities</h2>
+      <h2 className="text-base font-semibold mt-6 mb-1">4. 🛒 {M.procura}</h2>
       <p className="text-xs text-gray-400 mb-2">Ejecución — para usar una vez adjudicado el proyecto</p>
       <div className="mb-6 border border-gray-200 rounded p-3">
         <p className="text-xs text-gray-500 mb-3">
@@ -739,15 +749,15 @@ export default function AnalisisPareto() {
         {prioridadesCompra.map((p, i) => (
           <div key={p.id} className="flex items-center justify-between text-xs mb-1.5 border-b border-gray-100 pb-1.5">
             <span>{i + 1}. {p.codigo ? p.codigo + " — " : ""}{encabezado(p.name, 70)}</span>
-            <span className="text-gray-500">Necesario desde día {p.inicioFase} · fase {p.fase} · clase {p.clase}</span>
+            <span className="text-gray-500">Necesario desde la semana {semanaDeDia(p.inicioFase)} · fase {p.fase} · clase {p.clase}</span>
           </div>
         ))}
       </div>
 
       {MOSTRAR_CRITICAL_ACTIVITIES && (
         <>
-          <h2 className="text-base font-semibold mt-6 mb-1">🎯 Critical Activities</h2>
-          <p className="text-xs text-gray-400 mb-2">Pausado — hoy no aporta información distinta a Cost Drivers</p>
+          <h2 className="text-base font-semibold mt-6 mb-1">🎯 {M.actividadesCriticas}</h2>
+          <p className="text-xs text-gray-400 mb-2">Pausado — hoy no aporta información distinta a {M.costDrivers}</p>
           <div className="mb-6 border border-gray-200 rounded p-3">
             <p className="text-xs text-gray-500 mb-3">
               Combina peso en el presupuesto y urgencia según el cronograma (qué tan pronto se necesita). No es una ruta crítica calculada por dependencias reales entre actividades, sino una priorización razonable para dar seguimiento cercano.
@@ -755,21 +765,21 @@ export default function AnalisisPareto() {
             {actividadesCriticas.map((p, i) => (
               <div key={p.id} className="flex items-center justify-between text-xs mb-1.5 border-b border-gray-100 pb-1.5">
                 <span>{i + 1}. {p.codigo ? p.codigo + " — " : ""}{encabezado(p.name, 70)}</span>
-                <span className="text-gray-500">{p.pctInd.toFixed(1)}% del presupuesto · fase {p.fase} · día {p.inicioFase}</span>
+                <span className="text-gray-500">{p.pctInd.toFixed(1)}% del presupuesto · fase {p.fase} · semana {semanaDeDia(p.inicioFase)}</span>
               </div>
             ))}
           </div>
         </>
       )}
 
-      <h2 className="text-base font-semibold mt-6 mb-2">5. 📑 Executive Report</h2>
+      <h2 className="text-base font-semibold mt-6 mb-2">5. 📑 {M.reporteEjecutivo}</h2>
       <div className="mb-6 border border-gray-200 rounded p-3 bg-gray-50">
         <p className="text-sm text-gray-800 leading-relaxed">
-          El presupuesto analizado asciende a {fmt(total)}, distribuido en {analizadas.length} partidas y {cronograma.length} fases constructivas{plazoTotal ? ", con un plazo estimado de " + plazoTotal + " días" : " (plazo aún no definido en Construction Schedule)"}.
-          {" "}Este presupuesto tiene un Review Compression de {reviewCompression.toFixed(1)}×: {n80} partidas ({pct80DePartidas.toFixed(0)}%) explican el 80% del valor total.
+          El presupuesto analizado asciende a {fmt(total)}, distribuido en {analizadas.length} partidas y {cronograma.length} fases constructivas{plazoTotal ? ", con un plazo estimado de " + plazoTexto(plazoTotal) : " (plazo aún no definido en " + M.cronograma + ")"}.
+          {" "}Este presupuesto tiene una {M.compresionRevision} de {reviewCompression.toFixed(1)}×: {n80} partidas ({pct80DePartidas.toFixed(0)}%) explican el 80% del valor total.
           {" "}{porClase.A.length} partidas de clase A concentran la mayor parte del impacto financiero y deben revisarse con prioridad, siendo "{encabezado(analizadas.find(p=>p.clase==="A")?.name, 60) || "—"}" la de mayor peso individual.
           {" "}{plazoTotal && <>El período de mayor exigencia de flujo de caja es {picoFlujo?.periodo || "—"}, con un desembolso estimado de {picoFlujo ? fmt(picoFlujo.monto) : "$0"}. </>}
-          {prioridadesCompra.length > 0 && <>La primera orden de compra a colocar es "{encabezado(prioridadesCompra[0].name, 60)}", requerida desde el día {prioridadesCompra[0].inicioFase}.</>}
+          {prioridadesCompra.length > 0 && <>La primera orden de compra a colocar es "{encabezado(prioridadesCompra[0].name, 60)}", requerida desde la semana {semanaDeDia(prioridadesCompra[0].inicioFase)}.</>}
         </p>
       </div>
     </div>
