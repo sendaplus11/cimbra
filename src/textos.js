@@ -22,6 +22,10 @@ export const MODULOS = {
 export const WHATSAPP_NUMERO = "";
 export const WHATSAPP_MENSAJE = "Hola, tengo una pregunta sobre Cimbra.";
 
+// Correo de contacto. Mientras esté vacío, no se muestra el recuadro de contacto
+// en preguntas frecuentes ni el correo en el pie de página.
+export const CORREO_CONTACTO = "contacto@cimbrapro.com";
+
 export const LANDING = {
   cta: "Probar gratis",
   mensaje10s: "Tu software calcula el presupuesto. Cimbra te ayuda a saber dónde mirar.",
@@ -55,7 +59,7 @@ export const LANDING = {
       texto:
         "Cimbra no exige migrar a otra plataforma ni reconstruir el presupuesto desde cero: funciona sobre lo que el profesional ya elaboró, sin importar en qué programa lo hizo. Se coloca como una capa de análisis independiente sobre lo que ya existe.",
     },
-  ],
+    ],
   casoTitulo: "Caso de referencia",
   casoTexto:
     "En uno de los proyectos de mayor envergadura ejecutados por su fundador como Director de Construcción, un presupuesto real de 557 partidas mostró que apenas 105 partidas (el 19% del total) concentraban el 80% del valor económico de la obra, una compresión de revisión de 5,3 veces. La partida de mayor peso individual, casi el 10% del presupuesto completo, no era la más evidente a simple vista.",
@@ -63,7 +67,7 @@ export const LANDING = {
     { valor: "557", etiqueta: "partidas con valor" },
     { valor: "105", etiqueta: "concentran el 80%" },
     { valor: "5,3×", etiqueta: "compresión de revisión" },
-  ],
+    ],
 
   herramientaTitulo: "Compruébalo con tu propio presupuesto",
   herramientaTexto:
@@ -99,6 +103,8 @@ export const LANDING = {
       p: "¿Cómo se calcula el flujo de caja?",
       r: "Se distribuye el monto de cada fase a lo largo de su duración en el cronograma y se agrupa por semana, mes o año. Es un flujo estimado: mientras más ajustes el cronograma con tus fechas reales, más se acerca a tu proyecto.",
     },
-  ],
+    ],
   whatsappTexto: "¿Tienes otra pregunta? Escríbenos",
+  correoTitulo: "¿Tu pregunta no está aquí?",
+  correoTexto: "Escríbenos a",
 };
