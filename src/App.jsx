@@ -1,7 +1,7 @@
 import AnalisisPareto from "./AnalisisPareto.jsx";
 import logoPrincipal from "./assets/cimbra-logo-principal.svg";
 import logoHorizontal from "./assets/cimbra-logo-horizontal.svg";
-import { LANDING as T, WHATSAPP_NUMERO, WHATSAPP_MENSAJE } from "./textos.js";
+import { LANDING as T, WHATSAPP_NUMERO, WHATSAPP_MENSAJE, CORREO_CONTACTO } from "./textos.js";
 
 const YEAR = new Date().getFullYear();
 const whatsappUrl = WHATSAPP_NUMERO
@@ -99,10 +99,30 @@ export default function App() {
             </a>
           </div>
         )}
+        {CORREO_CONTACTO && (
+          <div className="text-center mt-4">
+            <p className="text-sm text-gray-500">
+              {T.correoTitulo}{" "}
+              <a href={"mailto:" + CORREO_CONTACTO} className="text-cimbra-amber font-medium hover:underline">
+                {T.correoTexto} {CORREO_CONTACTO}
+              </a>
+            </p>
+          </div>
+        )}
       </section>
 
       {/* Pie de página */}
-      <footer className="py-8 text-center text-sm text-gray-400 border-t border-gray-100">Cimbra · {YEAR}</footer>
+      <footer className="py-8 text-center text-sm text-gray-400 border-t border-gray-100">
+        Cimbra · {YEAR}
+        {CORREO_CONTACTO && (
+          <>
+            {" "}·{" "}
+            <a href={"mailto:" + CORREO_CONTACTO} className="hover:text-cimbra-dark">
+              {CORREO_CONTACTO}
+            </a>
+          </>
+        )}
+      </footer>
     </div>
   );
 }
