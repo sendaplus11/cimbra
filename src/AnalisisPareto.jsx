@@ -1,14 +1,19 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { ComposedChart, BarChart, Bar, Cell, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer } from "recharts";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
 import { MODULOS as M } from "./textos.js";
+import { ganttXML, barrasYLineaXML, lineaXML, agregarGraficos } from "./excelGraficos.js";
 
 let idCounter = 1;
 const newId = () => idCounter++;
 
 const initialPartidas = [];
 
-const fmt = (n) => "$" + Math.round(n || 0).toLocaleString("en-US");
+// Formato numérico en español, igual que la landing ("5,3×", "$1.234.567"):
+// coma decimal y punto de miles. Solo afecta lo que se ve en pantalla; los Excel
+// exportados guardan números reales y Excel los muestra según la configuración regional del usuario.
+const fmtNum = (n) => Math.round(n || 0).toLocaleString("de-DE");
+const d1 = (n) => (Number.isFinite(n) ? n : 0).toFixed(1).replace(".", ",");
 
 function truncar(s, n = 70) {
   const str = String(s || "");
@@ -51,6 +56,22 @@ function prefijoCodigo(codigo) {
   return codigo;
 }
 
+// Textos de una sola celda que NO son capítulos (títulos de columna, totales, etc.).
+const NO_ES_CAPITULO = /^(partidas?|descripci[oó]n|[ií]tem|item|total|sub-?total|obra|cliente|servicio|propietario|fecha)\b/i;
+// Filas que traen totales, subtotales o impuestos en la columna de descripción: no son partidas.
+const FILA_DE_TOTAL = /^\s*(i\.?v\.?a\b|impuesto|sub-?total|total\b)/i;
+// Líneas que suelen ser ajustes financieros y no trabajos de obra: se avisan, no se excluyen.
+const LINEA_DE_AJUSTE = /variaci[oó]n de precios|escalaci[oó]n|imprevistos|reajuste de precios|contingencias?\b/i;
+// Normaliza un texto para comparar descripciones: sin acentos, mayúsculas, sin signos.
+function normalizar(t) {
+  return String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+// "OBRAS CIVILES - ARQUITECTURA (1 al 127)" -> "OBRAS CIVILES - ARQUITECTURA"
+function limpiarCapitulo(t) {
+  return t.replace(/\s*\(\s*\d+\s*(al|a|-)\s*\d+\s*\)\s*$/i, "").replace(/\s+/g, " ").trim();
+}
+
 function encabezado(s, maxFallback = 55) {
   const str = String(s || "").trim();
   const corte = str.indexOf(".");
@@ -91,14 +112,14 @@ function classifyPhase(name) {
   return "Otras partidas";
 }
 
-function CostDriverTooltip({ active, payload }) {
+function CostDriverTooltip({ active, payload, fmt }) {
   if (!active || !payload || !payload.length) return null;
   const p = payload[0].payload;
   return (
     <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, padding: "8px 10px", fontSize: 12, maxWidth: 280, boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
       {p.codigo && <div style={{ color: "#6B7680", fontFamily: "monospace", fontSize: 11, marginBottom: 2 }}>{p.codigo}</div>}
       <div style={{ fontWeight: 500, marginBottom: 4 }}>{p.name}</div>
-      <div style={{ color: "#374151" }}>{fmt(p.monto)} · {p.pctInd.toFixed(1)}% individual · {p.pctAcum.toFixed(1)}% acumulado</div>
+      <div style={{ color: "#374151" }}>{fmt(p.monto)} · {d1(p.pctInd)}% individual · {d1(p.pctAcum)}% acumulado</div>
     </div>
   );
 }
@@ -109,12 +130,23 @@ export default function AnalisisPareto() {
   const [umbralB, setUmbralB] = useState(90);
   const [plazoTotal, setPlazoTotal] = useState(null);
   const [unidadTiempo, setUnidadTiempo] = useState("meses");
+  // Mientras el usuario no elija unidad, la plataforma la deduce del propio proyecto.
+  const [unidadElegida, setUnidadElegida] = useState(false);
   const [periodicidad, setPeriodicidad] = useState("mensual");
   const [inicioManual, setInicioManual] = useState({});
   const [duracionManual, setDuracionManual] = useState({});
   const [topN, setTopN] = useState("80");
   const [importError, setImportError] = useState("");
   const [importInfo, setImportInfo] = useState("");
+  // Moneda detectada en el archivo ("Bs. ", "$"). Si el archivo no la indica, no se muestra ningún símbolo.
+  const [moneda, setMoneda] = useState("");
+  // Solape entre fases del cronograma, en % de la duración de la fase anterior. Lo decide el usuario.
+  const [solape, setSolape] = useState(0);
+  // Cuando el archivo trae líneas de ajuste (variación de precios, imprevistos), el usuario elige si entran al análisis.
+  const [excluirAjustes, setExcluirAjustes] = useState(false);
+  // Avisos de lectura del archivo: partidas sin monto y total declarado en el propio archivo.
+  const [avisos, setAvisos] = useState({ sinMonto: 0, totalArchivo: null });
+  const fmt = (n) => moneda + fmtNum(n);
 
   const handleFile = (e) => {
     const file = e.target.files[0];
@@ -158,43 +190,107 @@ export default function AnalisisPareto() {
           const h = String(headerRow[i] || "").toLowerCase().trim();
           if (CODE_KEYS.some((k) => h.includes(k))) { codigoIdx = i; break; }
         }
+
+        // Capítulos del archivo: filas con una sola celda de texto (a la izquierda de la descripción
+        // o en ella) y sin monto. Si hay varios niveles, el capítulo es el nivel superior.
+        const esEncabezado = (row) => {
+          const celdas = [];
+          row.forEach((c, j) => { if (c !== null && c !== undefined && String(c).trim() !== "") celdas.push([j, c]); });
+          if (celdas.length !== 1) return null;
+          const [j, c] = celdas[0];
+          const texto = String(c).trim();
+          if (typeof c !== "string" || j > nameIdx || texto.length < 4 || NO_ES_CAPITULO.test(texto)) return null;
+          return { col: j, texto: limpiarCapitulo(texto) };
+        };
+        const encabezados = new Map();
+        for (let r = headerRowIdx + 1; r < rows.length; r++) {
+          if (!rows[r]) continue;
+          const h = esEncabezado(rows[r]);
+          if (h) encabezados.set(r, h);
+        }
+        const colTope = encabezados.size ? Math.min(...[...encabezados.values()].map((h) => h.col)) : -1;
+
         const nuevas = [];
-        let categoriaActual = null;
+        let sinMonto = 0;
+        let capituloActual = null;
         for (let r = headerRowIdx + 1; r < rows.length; r++) {
           const row = rows[r];
           if (!row) continue;
+          const enc = encabezados.get(r);
+          if (enc) {
+            if (enc.col === colTope) capituloActual = enc.texto;
+            continue;
+          }
           const name = row[nameIdx];
           const amountRaw = row[amountIdx];
           const amount = typeof amountRaw === "number" ? amountRaw : parseFloat(String(amountRaw || "").replace(/[^0-9.-]/g, ""));
-          const nombreLimpio = name ? String(name).trim() : "";
-          if (nombreLimpio && (isNaN(amount) || amount <= 0)) {
-            if (codigoIdx === -1) {
-              const restoVacio = row.every((celda, idx) => idx === nameIdx || celda === undefined || celda === null || String(celda).trim() === "");
-              if (restoVacio && nombreLimpio.length > 2) {
-                categoriaActual = nombreLimpio;
-              }
-            }
-            continue;
-          }
+          const nombreLimpio = name ? String(name).trim().replace(/^descripci[oó]n\s*:\s*/i, "") : "";
+          // Filas de totales, subtotales o impuestos que algunos presupuestos traen en la columna de descripción.
+          if (!nombreLimpio || FILA_DE_TOTAL.test(nombreLimpio)) continue;
           const codigo = codigoIdx !== -1 && row[codigoIdx] ? String(row[codigoIdx]).trim() : null;
-          if (nombreLimpio && !isNaN(amount) && amount > 0) {
-            const categoria = codigo ? prefijoCodigo(codigo) : categoriaActual;
-            nuevas.push({ id: newId(), orden: nuevas.length, name: nombreLimpio, monto: amount, codigo, categoria });
-          }
+          // Partida escrita en el archivo pero con monto cero: puede ser una omisión del presupuesto.
+          if (amount === 0 && (codigo || typeof row[0] === "number")) { sinMonto += 1; continue; }
+          if (isNaN(amount) || amount <= 0) continue;
+          nuevas.push({
+            id: newId(), orden: nuevas.length, name: nombreLimpio, monto: amount, codigo,
+            capitulo: capituloActual, categoria: codigo ? prefijoCodigo(codigo) : null,
+            esAjuste: LINEA_DE_AJUSTE.test(nombreLimpio),
+          });
         }
         if (nuevas.length === 0) {
           setImportError("No se encontraron partidas válidas en el archivo.");
           return;
         }
+        // ¿Sirven los capítulos del archivo? Deben ser al menos 2 y agrupar en promedio 2 o más partidas.
+        const capitulosDistintos = new Set(nuevas.map((p) => p.capitulo).filter(Boolean));
+        const usarCapitulos = capitulosDistintos.size >= 2 && nuevas.length / capitulosDistintos.size >= 2;
+        nuevas.forEach((p) => {
+          if (usarCapitulos) p.categoria = p.capitulo || "Otras partidas";
+        });
+
+        // Total declarado por el propio archivo (fila de "Total"): sirve para confirmar la lectura.
+        const totalImportado = nuevas.reduce((s, p) => s + p.monto, 0);
+        let totalArchivo = null;
+        let filasRevisadas = 0;
+        for (let r = rows.length - 1; r >= 0 && totalArchivo === null && filasRevisadas < 40; r--) {
+          const row = rows[r];
+          if (!row || !row.some((c) => c !== null && c !== undefined && String(c).trim() !== "")) continue;
+          filasRevisadas += 1;
+          const hayEtiqueta = row.some((c) => typeof c === "string" && /total|sub-?total/i.test(c));
+          if (!hayEtiqueta) continue;
+          for (const c of row) {
+            if (typeof c === "number" && c > 0 && Math.abs(c - totalImportado) / totalImportado < 0.005) { totalArchivo = c; break; }
+          }
+        }
+        setAvisos({ sinMonto, totalArchivo });
+        setExcluirAjustes(false);
+        setSolape(0);
+
+        const textoContexto = rows.slice(0, headerRowIdx + 1).concat(rows.slice(-25)).flat().filter((c) => typeof c === "string").join(" ");
+        const monedaDetectada = /(^|[^a-zñ])bs\.?([^a-zñ]|$)|bol[ií]vares\b/i.test(textoContexto) ? "Bs. " : /US\$|\bUSD\b|\bd[oó]lares\b|\(\$\)|\$\s*\d/i.test(textoContexto) ? "$" : "";
+        setMoneda(monedaDetectada);
+
         setPartidas(nuevas);
         setPlazoTotal(null);
         setInicioManual({});
         setDuracionManual({});
-        const tieneCategoriasReales = nuevas.some((p) => p.categoria);
         const totalCategorias = new Set(nuevas.map((p) => p.categoria).filter(Boolean)).size;
+        const ajustes = nuevas.filter((p) => p.esAjuste);
+        const otrasHojas = wb.SheetNames.slice(1).filter((n) => {
+          const ref = wb.Sheets[n] && wb.Sheets[n]["!ref"];
+          if (!ref) return false;
+          const rg = XLSX.utils.decode_range(ref);
+          return rg.e.r - rg.s.r >= 5;
+        });
         setImportInfo(
           nuevas.length + " partidas importadas correctamente." +
-          (tieneCategoriasReales ? " Se detectaron " + totalCategorias + " capítulos propios del archivo y se usarán para agrupar el " + M.cronograma + "." : "")
+          (totalArchivo !== null ? " La suma coincide con el total indicado en el archivo." : "") +
+          (totalCategorias > 1 ? " Se detectaron " + totalCategorias + " capítulos propios del archivo y se usarán para agrupar el " + M.cronograma + "." : "") +
+          (sinMonto ? " " + sinMonto + (sinMonto === 1 ? " partida del archivo no tiene monto y quedó fuera del análisis" : " partidas del archivo no tienen monto y quedaron fuera del análisis") + "; revisa si es una omisión del presupuesto." : "") +
+          (ajustes.length
+            ? " Atención: " + ajustes.length + (ajustes.length === 1 ? " línea parece un ajuste" : " líneas parecen ajustes") + " y no un trabajo de obra («" + ajustes.map((p) => truncar(p.name, 40)).join("», «") + "», " + d1((ajustes.reduce((s, p) => s + p.monto, 0) / totalImportado) * 100) + "% del total); se incluye en el análisis, revísala."
+            : "") +
+          (otrasHojas.length ? " El archivo tiene otras hojas con datos (" + otrasHojas.join(", ") + "); se analizó solo la primera («" + wb.SheetNames[0] + "»)." : "")
         );
       } catch (err) {
         setImportError("No se pudo leer el archivo. Verifica que sea un Excel o CSV válido.");
@@ -204,35 +300,67 @@ export default function AnalisisPareto() {
   };
 
 
-  const total = partidas.reduce((s, p) => s + p.monto, 0);
+  const lineasDeAjuste = partidas.filter((p) => p.esAjuste);
+  const partidasActivas = excluirAjustes ? partidas.filter((p) => !p.esAjuste) : partidas;
+  const total = partidasActivas.reduce((s, p) => s + p.monto, 0);
 
-  const ordenadas = [...partidas].sort((a, b) => b.monto - a.monto);
+  const ordenadas = [...partidasActivas].sort((a, b) => b.monto - a.monto);
   let acumulado = 0;
-  const analizadas = ordenadas.map((p, i) => {
+  const conAcumulado = ordenadas.map((p, i) => {
     acumulado += p.monto;
     const pctInd = total ? (p.monto / total) * 100 : 0;
     const pctAcum = total ? (acumulado / total) * 100 : 0;
-    const clase = pctAcum <= umbralA ? "A" : pctAcum <= umbralB ? "B" : "C";
-    const nombreCorto = (p.codigo ? p.codigo + " " : "") + encabezado(p.name, 26);
-    return { ...p, rank: i + 1, pctInd, pctAcum, clase, nombreCorto };
+    return { ...p, rank: i + 1, pctInd, pctAcum };
   });
+  // La clase A son las partidas necesarias para ALCANZAR el umbral (incluye la que lo cruza),
+  // igual que en la Compresión de Revisión: así todos los conteos de la pantalla coinciden.
+  const partidasHasta = (umbral) => {
+    for (let i = 0; i < conAcumulado.length; i++) {
+      if (conAcumulado[i].pctAcum >= umbral) return i + 1;
+    }
+    return conAcumulado.length;
+  };
+  const nClaseA = partidasHasta(umbralA);
+  const nClaseB = Math.max(nClaseA, partidasHasta(umbralB));
+  const analizadas = conAcumulado.map((p, i) => ({
+    ...p,
+    clase: i < nClaseA ? "A" : i < nClaseB ? "B" : "C",
+    nombreCorto: (p.codigo ? p.codigo + " " : "") + encabezado(p.name, 26),
+  }));
 
   const porClase = { A: [], B: [], C: [] };
   analizadas.forEach((p) => porClase[p.clase].push(p));
 
-  function encontrarN(umbral) {
-    for (let i = 0; i < analizadas.length; i++) {
-      if (analizadas[i].pctAcum >= umbral) return i + 1;
-    }
-    return analizadas.length;
-  }
-  const n80 = encontrarN(80);
-  const n90 = encontrarN(90);
+  const n80 = partidasHasta(80);
+  const n90 = partidasHasta(90);
   const pct80DePartidas = analizadas.length ? (n80 / analizadas.length) * 100 : 0;
   const reviewCompression = n80 > 0 ? analizadas.length / n80 : 0;
 
+  // Hasta dónde vale la pena revisar: las partidas necesarias para alcanzar el umbral de clase A.
+  const corteRevision = porClase.A.length;
   const partidasMostradas = topN === "todos" ? analizadas : analizadas.slice(0, topN === "90" ? n90 : n80);
   const pctCubierto = partidasMostradas.length ? partidasMostradas[partidasMostradas.length - 1].pctAcum : 0;
+
+  // Familias: partidas que comparten el mismo código en el archivo (o, sin códigos, la misma
+  // descripción). Una familia puede pesar mucho sin que ninguna de sus partidas destaque sola.
+  const familiasMap = new Map();
+  analizadas.forEach((p) => {
+    const clave = p.codigo ? "cod:" + p.codigo.toUpperCase() : "des:" + normalizar(encabezado(p.name, 60));
+    if (!familiasMap.has(clave)) {
+      familiasMap.set(clave, { clave, etiqueta: p.codigo ? p.codigo : encabezado(p.name, 60), nombre: encabezado(p.name, 60), monto: 0, partidas: [] });
+    }
+    const f = familiasMap.get(clave);
+    f.monto += p.monto;
+    f.partidas.push(p);
+  });
+  const todasLasFamilias = [...familiasMap.values()]
+    .filter((f) => f.partidas.length > 1)
+    .map((f) => ({ ...f, pct: total ? (f.monto / total) * 100 : 0, mejorRank: Math.min(...f.partidas.map((p) => p.rank)) }))
+    .sort((a, b) => b.monto - a.monto);
+  // Una familia que pesa más que la mayor partida individual es justo lo que el ranking por partida no muestra.
+  const familiaDestacada = todasLasFamilias.find((f) => analizadas.length && f.monto > analizadas[0].monto) || null;
+  // Solo se muestran si aportan algo: o hay una familia que supera a la mayor partida, o alguna pesa 3% o más.
+  const familias = familiaDestacada || (todasLasFamilias[0] && todasLasFamilias[0].pct >= 3) ? todasLasFamilias.filter((f) => f.pct >= 0.5) : [];
 
   const usaCategoriasReales = analizadas.some((p) => p.categoria);
   const categoriasUnicas = new Set(analizadas.map((p) => p.categoria).filter(Boolean)).size;
@@ -244,7 +372,7 @@ export default function AnalisisPareto() {
     analizadas.forEach((p) => {
       const ph = p.categoria || "Sin categoría en el archivo";
       if (!fasesMap[ph]) {
-        fasesMap[ph] = { name: ph, monto: 0, partidas: [] };
+        fasesMap[ph] = { key: "c:" + ph, name: ph, monto: 0, partidas: [] };
         fasesAppearanceOrder.push(ph);
       }
       fasesMap[ph].monto += p.monto;
@@ -256,47 +384,94 @@ export default function AnalisisPareto() {
     fasesOrdenadas = fasesAppearanceOrder.sort((x, y) => primeraAparicion(x) - primeraAparicion(y)).map((ph) => fasesMap[ph]);
   } else {
     // Sin capítulos reales, o con un único capítulo que abarca todo el presupuesto:
-    // no tiene sentido agrupar, cada partida aparece en el cronograma con su propio peso económico.
-    fasesOrdenadas = analizadas.map((p) => ({
-      name: (p.codigo ? p.codigo + " " : "") + encabezado(p.name, 45),
-      monto: p.monto,
-      partidas: [p],
-    }));
+    // no tiene sentido agrupar, cada partida aparece en el cronograma con su propio peso económico,
+    // en el mismo orden del archivo (que normalmente sigue la secuencia constructiva), no por monto.
+    fasesOrdenadas = [...analizadas]
+      .sort((x, y) => (x.orden ?? 0) - (y.orden ?? 0))
+      .map((p) => ({
+        key: "p:" + p.id,
+        name: (p.codigo ? p.codigo + " " : "") + encabezado(p.name, 45),
+        monto: p.monto,
+        partidas: [p],
+      }));
+    // Partidas distintas con el mismo texto (p. ej. tuberías de varios diámetros): se numeran.
+    const repetidos = {};
+    fasesOrdenadas.forEach((f) => (repetidos[f.name] = (repetidos[f.name] || 0) + 1));
+    const contados = {};
+    fasesOrdenadas.forEach((f) => {
+      if (repetidos[f.name] > 1) {
+        contados[f.name] = (contados[f.name] || 0) + 1;
+        f.name = f.name + " (" + contados[f.name] + "/" + repetidos[f.name] + ")";
+      }
+    });
   }
+  // Duración mínima por fase: una semana, salvo que haya tantas fases que ni siquiera quepan;
+  // así se evitan fases de "0,3 semanas" que ningún profesional puede ejecutar.
+  const nFases = fasesOrdenadas.length || 1;
+  const minDias = plazoTotal ? Math.min(7, plazoTotal / nFases) : 1;
+  const factorSolape = 1 - solape / 100;
+  let huboMinimo = false;
+  // Duración proporcional al peso económico, con mínimo, y reescalada para que el conjunto
+  // termine en el plazo indicado por el usuario (el solape acorta el calendario, no las fases).
+  const duracionesBase = fasesOrdenadas.map((f) => {
+    const pct = total ? f.monto / total : 0;
+    const d = pct * (plazoTotal || 0);
+    if (plazoTotal && d < minDias) huboMinimo = true;
+    return Math.max(minDias, d);
+  });
+  let cursorProv = 0;
+  const provisional = duracionesBase.map((d, i) => {
+    const ini = cursorProv;
+    cursorProv = ini + d * factorSolape;
+    return { ini, d };
+  });
+  const spanProv = provisional.length ? provisional[provisional.length - 1].ini + provisional[provisional.length - 1].d : 0;
+  const escala = plazoTotal && spanProv > 0 ? plazoTotal / spanProv : 1;
+
   let cursorDia = 0;
   const cronograma = fasesOrdenadas.map((f, i) => {
     const pct = total ? f.monto / total : 0;
-    const diasAuto = Math.max(1, Math.round(pct * plazoTotal));
-    const esManualDuracion = duracionManual[f.name] !== undefined;
-    const dias = esManualDuracion ? Math.max(1, duracionManual[f.name]) : diasAuto;
-    const inicioAuto = cursorDia;
-    const esManualInicio = inicioManual[f.name] !== undefined;
-    const inicio = esManualInicio ? inicioManual[f.name] : inicioAuto;
-    cursorDia = inicio + dias;
+    const diasAuto = Math.max(1, Math.round(duracionesBase[i] * escala));
+    const esManualDuracion = duracionManual[f.key] !== undefined;
+    const dias = esManualDuracion ? Math.max(1, duracionManual[f.key]) : diasAuto;
+    const inicioAuto = Math.round(cursorDia);
+    const esManualInicio = inicioManual[f.key] !== undefined;
+    const inicio = esManualInicio ? inicioManual[f.key] : inicioAuto;
+    cursorDia = inicio + dias * factorSolape;
     return { ...f, pct, dias, diasAuto, inicio, inicioAuto, esManualInicio, esManualDuracion, fin: inicio + dias };
   });
-  if (cronograma.length) {
-    const ultima = cronograma[cronograma.length - 1];
-    if (!ultima.esManualInicio && !ultima.esManualDuracion) {
-      ultima.fin = plazoTotal;
-      ultima.dias = Math.max(1, plazoTotal - ultima.inicio);
-    }
-  }
+  const finDeObra = cronograma.length ? Math.max(...cronograma.map((f) => f.fin)) : 0;
   const domainMax = Math.max(plazoTotal, ...cronograma.map((f) => f.fin), 1);
   // El motor calcula siempre en días; las unidades solo cambian la presentación.
   // Mes = 30 días y año = 365 días, igual que en el Flujo de Caja.
   const DIAS_UNIDAD = { semanas: 7, meses: 30, "años": 365 };
   const NOMBRE_UNIDAD = { semanas: "semanas", meses: "meses", "años": "años" };
+  const UNIDAD_SINGULAR = { semanas: "semana", meses: "mes", "años": "año" };
+  const ABREV_UNIDAD = { semanas: "sem.", meses: "meses", "años": "años" };
+  // La unidad del cronograma la manda el proyecto: una obra de 6 meses se lee en semanas,
+  // una de 3 años en meses, y una de una década en años. Si las fases son muy cortas para
+  // la unidad, se baja un escalón para que ninguna barra quede en "0,3".
+  const unidadSugerida = (dias, nF) => {
+    if (!dias) return "meses";
+    const promedio = dias / Math.max(1, nF);
+    if (dias <= 182 || promedio < 30) return "semanas";
+    if (dias <= 1460 || promedio < 120) return "meses";
+    return "años";
+  };
   const aniosDisponible = plazoTotal === null || plazoTotal >= 365;
-  const unidadEfectiva = unidadTiempo === "años" && !aniosDisponible ? "meses" : unidadTiempo;
+  const unidadAuto = unidadSugerida(plazoTotal, fasesOrdenadas.length);
+  const unidadPedida = unidadElegida ? unidadTiempo : unidadAuto;
+  const unidadEfectiva = unidadPedida === "años" && !aniosDisponible ? "meses" : unidadPedida;
   const diasPorUnidad = DIAS_UNIDAD[unidadEfectiva];
   const unidadLabel = NOMBRE_UNIDAD[unidadEfectiva];
+  const unidadAbrev = ABREV_UNIDAD[unidadEfectiva];
   const aUnidad = (dias) => Math.round((dias / diasPorUnidad) * 10) / 10;
   const aDias = (valorUnidad) => Math.round(valorUnidad * diasPorUnidad);
-  // La edición por fase siempre es en semanas: nadie planifica una fase de "1,4 meses".
-  const aSemanas = (dias) => Math.round((dias / 7) * 10) / 10;
-  const semanasADias = (sem) => Math.round(sem * 7);
-  const semanaDeDia = (dia) => Math.floor(dia / 7) + 1;
+  // La edición de cada fase usa la misma unidad que el resto del cronograma.
+  const aUnidadEd = (dias) => Math.round((dias / diasPorUnidad) * 10) / 10;
+  const unidadEdADias = (v) => Math.round(v * diasPorUnidad);
+  const numeroDeMomento = (dia) => Math.floor(dia / diasPorUnidad) + 1;
+  const momentoDeDia = (dia) => UNIDAD_SINGULAR[unidadEfectiva] + " " + numeroDeMomento(dia);
   const plazoTexto = (dias) => aUnidad(dias).toLocaleString("es") + " " + unidadLabel;
   const cronogramaDisplay = cronograma.map((f) => ({ ...f, inicio: aUnidad(f.inicio), dias: aUnidad(f.dias) }));
 
@@ -327,11 +502,13 @@ export default function AnalisisPareto() {
   const costoPorFase = [...cronograma].sort((a, b) => b.monto - a.monto);
 
   const faseInicioMap = {};
-  cronograma.forEach((f) => (faseInicioMap[f.name] = f.inicio));
+  const faseNombreMap = {};
+  cronograma.forEach((f) => { faseInicioMap[f.key] = f.inicio; faseNombreMap[f.key] = f.name; });
 
   const analizadasConFase = analizadas.map((p) => {
-    const fase = usarCapitulosParaSchedule ? (p.categoria || "Sin categoría en el archivo") : (p.codigo ? p.codigo + " " : "") + encabezado(p.name, 45);
-    const inicioFase = faseInicioMap[fase] ?? 0;
+    const faseKey = usarCapitulosParaSchedule ? "c:" + (p.categoria || "Sin categoría en el archivo") : "p:" + p.id;
+    const fase = faseNombreMap[faseKey] ?? "";
+    const inicioFase = faseInicioMap[faseKey] ?? 0;
     const urgencia = plazoTotal ? 1 - inicioFase / plazoTotal : 0;
     const criticidad = p.pctInd * 0.7 + urgencia * 100 * 0.3;
     return { ...p, fase, inicioFase, criticidad };
@@ -345,77 +522,345 @@ export default function AnalisisPareto() {
 
   const picoFlujo = flujoCaja.length ? flujoCaja.reduce((max, f) => (f.monto > max.monto ? f : max), flujoCaja[0]) : null;
 
-  const handleExport = () => {
-    const rows = analizadas.map((p) => ({
-      Ranking: p.rank,
-      Partida: p.name,
-      Monto: p.monto,
-      "% Individual": Number(p.pctInd.toFixed(2)),
-      "% Acumulado": Number(p.pctAcum.toFixed(2)),
-      Clase: p.clase,
-    }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    ws["!cols"] = [{ wch: 10 }, { wch: 40 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 8 }];
-    XLSX.utils.sheet_add_json(ws, [
-      {},
-      { Ranking: M.compresionRevision, Partida: reviewCompression.toFixed(1) + "×" },
-      { Ranking: "Partidas para 80%", Partida: n80, Monto: pct80DePartidas.toFixed(0) + "%" },
-      { Ranking: "Partidas para 90%", Partida: n90, Monto: (analizadas.length ? (n90/analizadas.length*100) : 0).toFixed(0) + "%" },
-    ], { origin: -1, skipHeader: true });
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Cost Drivers");
+  const hayPlazo = plazoTotal !== null && plazoTotal > 0;
+  const primeraClaseA = analizadas.find((p) => p.clase === "A");
 
-    const cronoRows = cronograma.map((f) => ({
-      Fase: f.name,
-      "Semana inicio": semanaDeDia(f.inicio),
-      "Duración (semanas)": aSemanas(f.dias),
-      "Día inicio": f.inicio,
-      "Día fin": f.fin,
-      "Duración (días)": f.dias,
-      Monto: f.monto,
-      Partidas: f.partidas.map((p) => p.name).join(", "),
-    }));
-    const ws2 = XLSX.utils.json_to_sheet(cronoRows);
-    ws2["!cols"] = [{ wch: 30 }, { wch: 12 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 60 }];
-    XLSX.utils.book_append_sheet(wb, ws2, "Cronograma de Obra");
+  // Texto del Reporte Ejecutivo: el mismo en pantalla y en el Excel.
+  const textoEjecutivo = [
+    "El presupuesto analizado asciende a " + fmt(total) + ", distribuido en " + analizadas.length + " partidas y " + cronograma.length + " fases constructivas" + (hayPlazo ? ", con un plazo estimado de " + plazoTexto(plazoTotal) : " (plazo aún no definido en " + M.cronograma + ")") + ".",
+    "Este presupuesto tiene una " + M.compresionRevision + " de " + d1(reviewCompression) + "×: " + n80 + " partidas (" + pct80DePartidas.toFixed(0) + "%) explican el 80% del valor total.",
+    porClase.A.length + " partidas de clase A concentran la mayor parte del impacto financiero y deben revisarse con prioridad" + (primeraClaseA ? ", siendo \"" + encabezado(primeraClaseA.name, 60) + "\" la de mayor peso individual." : "."),
+    hayPlazo && picoFlujo ? "El período de mayor exigencia de flujo de caja es " + picoFlujo.periodo + ", con un desembolso estimado de " + fmt(picoFlujo.monto) + "." : null,
+    hayPlazo && prioridadesCompra.length > 0 ? "La primera orden de compra a colocar es \"" + encabezado(prioridadesCompra[0].name, 60) + "\", requerida desde la " + momentoDeDia(prioridadesCompra[0].inicioFase) + "." : null,
+  ].filter(Boolean).join(" ");
 
-    const flujoSemanal = calcularFlujo(7, "Semana");
-    const flujoMensual = calcularFlujo(30, "Mes");
-    const flujoAnual = calcularFlujo(365, "Año");
-    [
-      ["Flujo de Caja Semanal", flujoSemanal],
-      ["Flujo de Caja Mensual", flujoMensual],
-      ["Flujo de Caja Anual", flujoAnual],
-    ].forEach(([sheetName, filas]) => {
-      const filaRows = filas.map((f) => ({
-        Periodo: f.periodo,
-        "Flujo del período": Math.round(f.monto),
-        "% Acumulado": Number(f.pctAcum.toFixed(2)),
-      }));
-      const wsF = XLSX.utils.json_to_sheet(filaRows);
-      wsF["!cols"] = [{ wch: 14 }, { wch: 16 }, { wch: 14 }];
-      XLSX.utils.book_append_sheet(wb, wsF, sheetName);
+  const NAVY = "1C2B39";
+  const AMBAR = "C9922B";
+  const borde = { style: "thin", color: { rgb: "D1D5DB" } };
+  const bordes = { top: borde, bottom: borde, left: borde, right: borde };
+  const estiloEncabezado = {
+    font: { bold: true, color: { rgb: "FFFFFF" }, name: "Arial", sz: 10 },
+    fill: { patternType: "solid", fgColor: { rgb: NAVY } },
+    alignment: { horizontal: "center", vertical: "center", wrapText: true },
+    border: bordes,
+  };
+  const estiloClase = {
+    A: { font: { bold: true, color: { rgb: "B91C1C" } }, fill: { patternType: "solid", fgColor: { rgb: "FEE2E2" } } },
+    B: { font: { bold: true, color: { rgb: "92400E" } }, fill: { patternType: "solid", fgColor: { rgb: "FEF3C7" } } },
+    C: { font: { bold: true, color: { rgb: "374151" } }, fill: { patternType: "solid", fgColor: { rgb: "F3F4F6" } } },
+  };
+  const FMT_MONTO = moneda ? '"' + moneda + '"#,##0' : "#,##0";
+  const FMT_PCT = "0.0%";
+
+  const estilar = (ws, r, c, extra) => {
+    const a = XLSX.utils.encode_cell({ r, c });
+    if (!ws[a]) return;
+    ws[a].s = { ...(ws[a].s || {}), ...extra };
+  };
+
+  // Hoja de tabla: encabezado de marca, anchos, formatos numéricos y filtro.
+  // `formatos` asigna un formato de número por índice de columna.
+  const hojaTabla = (encabezados, filas, anchos, formatos = {}, colClase = -1) => {
+    const ws = XLSX.utils.aoa_to_sheet([encabezados, ...filas]);
+    ws["!cols"] = anchos.map((wch) => ({ wch }));
+    ws["!rows"] = [{ hpt: 30 }];
+    encabezados.forEach((_, c) => estilar(ws, 0, c, estiloEncabezado));
+    filas.forEach((fila, i) => {
+      fila.forEach((valor, c) => {
+        const a = XLSX.utils.encode_cell({ r: i + 1, c });
+        if (!ws[a]) return;
+        if (formatos[c]) ws[a].z = formatos[c];
+        if (c === 0 && typeof valor === "number") ws[a].s = { alignment: { horizontal: "center" } };
+        if (c === colClase && estiloClase[valor]) {
+          ws[a].s = { ...estiloClase[valor], alignment: { horizontal: "center" } };
+        }
+      });
     });
+    if (filas.length) {
+      ws["!autofilter"] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: filas.length, c: encabezados.length - 1 } }) };
+    }
+    return ws;
+  };
 
-    const curvaRows = flujoCaja.map((f) => ({ Periodo: f.periodo, "% Avance financiero acumulado": Number(f.pctAcum.toFixed(2)) }));
-    const wsCurva = XLSX.utils.json_to_sheet(curvaRows);
-    wsCurva["!cols"] = [{ wch: 14 }, { wch: 24 }];
-    XLSX.utils.book_append_sheet(wb, wsCurva, "Curva de Avance");
+  // Un texto de celda no puede pasar de 32.767 caracteres: se resume la lista de partidas por fase.
+  const listaPartidas = (partidas) => resumirNombres(partidas, 25, (p) => (p.codigo ? p.codigo + " " : "") + encabezado(p.name, 60));
 
-    const compraRows = prioridadesCompra.map((p, i) => ({ Prioridad: i + 1, Partida: p.name, "Semana requerida": semanaDeDia(p.inicioFase), "Día requerido": p.inicioFase, Fase: p.fase, Clase: p.clase }));
-    const wsCompra = XLSX.utils.json_to_sheet(compraRows);
-    wsCompra["!cols"] = [{ wch: 10 }, { wch: 40 }, { wch: 16 }, { wch: 14 }, { wch: 32 }, { wch: 8 }];
-    XLSX.utils.book_append_sheet(wb, wsCompra, M.procura);
+  const colLetra = (i) => XLSX.utils.encode_col(i);
+
+  const handleExport = () => {
+    const fecha = new Date().toLocaleDateString("es", { year: "numeric", month: "long", day: "numeric" });
+    const wb = XLSX.utils.book_new();
+    const graficos = [];
+    // Hojas largas en las que conviene dejar fijo el encabezado al desplazarse.
+    const hojasCongeladas = [M.costDrivers, M.cronograma, M.procura];
+
+    // --- Hoja 1: Resumen (con el gráfico de las partidas de mayor peso) ---
+    const filasResumen = [];
+    const fila = (...celdas) => { filasResumen.push(celdas); return filasResumen.length - 1; };
+    const rTitulo = fila("Cimbra — Inteligencia de costos");
+    const rSubtitulo = fila("Reporte de análisis de presupuesto · " + fecha);
+    fila();
+    const rDatos1 = fila("Total analizado (suma de las partidas, sin IVA)", total);
+    fila("Partidas con valor", analizadas.length);
+    fila(M.compresionRevision, Number(reviewCompression.toFixed(2)));
+    const rPct80 = fila("Partidas que concentran el 80% del valor", n80, analizadas.length ? n80 / analizadas.length : 0);
+    const rPct90 = fila("Partidas que concentran el 90% del valor", n90, analizadas.length ? n90 / analizadas.length : 0);
+    fila("Umbral clase A / clase B", umbralA + "% / " + umbralB + "%");
+    fila("Partidas clase A", porClase.A.length);
+    const rDatos2 = fila("Plazo total estimado", hayPlazo ? plazoTexto(plazoTotal) : "No definido");
+    fila();
+    const rTitEjec = fila(M.reporteEjecutivo);
+    const rTextoEjec = fila(textoEjecutivo);
+    fila();
+    const rTitLeer = fila("Cómo leer este reporte");
+    const parrafos = [
+      "Cimbra te dice DÓNDE mirar: las partidas de clase A concentran el mayor valor económico y merecen tu revisión primero. Tu software de estimación te permite decidir CÓMO cambiarlo. El criterio final sobre precios, alcance y compras es siempre del profesional.",
+      "El total analizado es la suma de las partidas importadas: no incluye IVA ni otros montos que el archivo sume aparte." +
+        (avisos.totalArchivo !== null ? " Coincide con el total indicado en el archivo de origen." : ""),
+      "El cronograma es una aproximación por fases proporcional al peso económico; no es un cronograma CPM (sin dependencias ni ruta crítica).",
+    ];
+    if (huboMinimo && hayPlazo) parrafos.push("Las fases de menor peso recibieron una duración mínima para que el cronograma sea ejecutable; el conjunto se ajusta al plazo indicado.");
+    if (solape > 0 && hayPlazo) parrafos.push("El cronograma se calculó con un solape de " + solape + "% entre fases consecutivas, indicado por el usuario.");
+    if (avisos.sinMonto) parrafos.push(avisos.sinMonto + (avisos.sinMonto === 1 ? " partida del archivo no tiene monto y quedó fuera del análisis." : " partidas del archivo no tienen monto y quedaron fuera del análisis.") + " Revisa si es una omisión del presupuesto.");
+    if (excluirAjustes && lineasDeAjuste.length) parrafos.push("Se excluyeron " + lineasDeAjuste.length + " líneas de ajuste (variación de precios, imprevistos u similares) a pedido del usuario.");
+    if (!hayPlazo) parrafos.push("Este reporte se descargó sin plazo total, por lo que no incluye Cronograma de Obra, Flujo de Caja ni Curva de Avance. Define el plazo en el módulo " + M.cronograma + " y vuelve a descargar para incluirlos.");
+    const rParrafos = parrafos.map((t) => fila(t));
+
+    // Bloque de datos que alimenta el gráfico del Resumen.
+    const topGrafico = analizadas.slice(0, 15);
+    let rTitGrafico = null;
+    let rDatoGrafico1 = null;
+    if (topGrafico.length >= 3) {
+      fila();
+      rTitGrafico = fila("Las " + topGrafico.length + " partidas de mayor peso");
+      rDatoGrafico1 = fila("Partida", "Monto", "% acumulado", "Descripción") + 1;
+      // La etiqueta del gráfico va corta para que se lea; la descripción completa queda al lado.
+      topGrafico.forEach((p) => fila(p.codigo ? p.codigo : "#" + p.rank, p.monto, p.pctAcum / 100, encabezado(p.name, 70)));
+    }
+
+    const wsResumen = XLSX.utils.aoa_to_sheet(filasResumen);
+    wsResumen["!cols"] = [{ wch: 46 }, { wch: 18 }, { wch: 14 }, { wch: 52 }];
+    wsResumen["!merges"] = [];
+    wsResumen["!rows"] = [];
+    estilar(wsResumen, rTitulo, 0, { font: { bold: true, sz: 16, color: { rgb: NAVY }, name: "Arial" } });
+    estilar(wsResumen, rSubtitulo, 0, { font: { italic: true, sz: 10, color: { rgb: "6B7680" }, name: "Arial" } });
+    for (let r = rDatos1; r <= rDatos2; r++) {
+      estilar(wsResumen, r, 0, { font: { bold: true, color: { rgb: NAVY } }, border: bordes });
+      estilar(wsResumen, r, 1, { alignment: { horizontal: "right" }, border: bordes });
+    }
+    wsResumen[XLSX.utils.encode_cell({ r: rDatos1, c: 1 })].z = FMT_MONTO;
+    wsResumen[XLSX.utils.encode_cell({ r: rDatos1 + 2, c: 1 })].z = '0.0"×"';
+    [rPct80, rPct90].forEach((r) => {
+      wsResumen[XLSX.utils.encode_cell({ r, c: 2 })].z = "0%";
+      estilar(wsResumen, r, 2, { alignment: { horizontal: "right" }, border: bordes });
+    });
+    [rTitEjec, rTitLeer].concat(rTitGrafico === null ? [] : [rTitGrafico]).forEach((r) =>
+      estilar(wsResumen, r, 0, { font: { bold: true, sz: 12, color: { rgb: AMBAR } }, border: { bottom: { style: "medium", color: { rgb: AMBAR } } } })
+    );
+    [rTextoEjec].concat(rParrafos).forEach((r) => {
+      wsResumen["!merges"].push({ s: { r, c: 0 }, e: { r, c: 2 } });
+      estilar(wsResumen, r, 0, { alignment: { wrapText: true, vertical: "top" }, font: { name: "Arial", sz: 10 } });
+      const texto = String(filasResumen[r][0] || "");
+      wsResumen["!rows"][r] = { hpt: Math.max(16, Math.ceil(texto.length / 95) * 15) };
+    });
+    if (rDatoGrafico1 !== null) {
+      [0, 1, 2, 3].forEach((c) => estilar(wsResumen, rDatoGrafico1 - 1, c, estiloEncabezado));
+      for (let i = 0; i < topGrafico.length; i++) {
+        wsResumen[XLSX.utils.encode_cell({ r: rDatoGrafico1 + i, c: 1 })].z = FMT_MONTO;
+        wsResumen[XLSX.utils.encode_cell({ r: rDatoGrafico1 + i, c: 2 })].z = FMT_PCT;
+      }
+      graficos.push({
+        hoja: "Resumen",
+        xml: barrasYLineaXML({
+          hoja: "Resumen", colCat: "A", colBarra: "B", colLinea: "C",
+          fila1: rDatoGrafico1 + 1, filaN: rDatoGrafico1 + topGrafico.length,
+          filaNombre: rDatoGrafico1,
+          titulo: "Partidas de mayor peso y valor acumulado",
+          formatoBarra: FMT_MONTO, tituloEjeIzq: "Monto de la partida", tituloEjeDer: "% acumulado del presupuesto",
+        }),
+        col1: 5, fila1: rDatoGrafico1 - 1, col2: 16, fila2: rDatoGrafico1 + 21,
+      });
+    }
+    XLSX.utils.book_append_sheet(wb, wsResumen, "Resumen");
+
+    // --- Hoja 2: Cost Drivers ---
+    const conCodigo = analizadas.some((p) => p.codigo);
+    const encCD = ["Ranking"].concat(conCodigo ? ["Código"] : [], ["Partida"], usarCapitulosParaSchedule ? ["Capítulo"] : [], ["Monto", "% Individual", "% Acumulado", "Clase"]);
+    const filasCD = analizadas.map((p) =>
+      [p.rank].concat(conCodigo ? [p.codigo || ""] : [], [p.name], usarCapitulosParaSchedule ? [p.categoria || ""] : [], [p.monto, p.pctInd / 100, p.pctAcum / 100, p.clase])
+    );
+    const iMonto = encCD.indexOf("Monto");
+    const anchosCD = encCD.map((h) => ({ Ranking: 9, "Código": 14, Partida: 60, "Capítulo": 26, Monto: 16, "% Individual": 13, "% Acumulado": 13, Clase: 8 }[h]));
+    const wsCD = hojaTabla(encCD, filasCD, anchosCD, { [iMonto]: FMT_MONTO, [iMonto + 1]: FMT_PCT, [iMonto + 2]: FMT_PCT }, iMonto + 3);
+    // Línea de corte: dónde termina la revisión que vale la pena.
+    if (corteRevision > 0 && corteRevision < filasCD.length) {
+      const rCorte = corteRevision + 1; // fila (0-based) de la primera partida que ya NO es prioritaria
+      const bordeCorte = { style: "medium", color: { rgb: AMBAR } };
+      encCD.forEach((_, c) => estilar(wsCD, rCorte, c, { border: { top: bordeCorte } }));
+      const aviso = XLSX.utils.encode_cell({ r: rCorte, c: encCD.length + 1 });
+      wsCD[aviso] = {
+        t: "s",
+        v: "◀ Línea de corte: las " + corteRevision + " partidas de arriba concentran el " + (porClase.A.length ? porClase.A[porClase.A.length - 1].pctAcum.toFixed(0) : 0) + "% del valor. De aquí hacia abajo el impacto individual es bajo.",
+        s: { font: { bold: true, color: { rgb: AMBAR }, sz: 10 }, alignment: { vertical: "center" } },
+      };
+      const rango = XLSX.utils.decode_range(wsCD["!ref"]);
+      rango.e.c = Math.max(rango.e.c, encCD.length + 1);
+      wsCD["!ref"] = XLSX.utils.encode_range(rango);
+      wsCD["!cols"][encCD.length] = { wch: 3 };
+      wsCD["!cols"][encCD.length + 1] = { wch: 90 };
+    }
+    XLSX.utils.book_append_sheet(wb, wsCD, M.costDrivers);
+
+    // --- Familias de partidas (mismo código o misma descripción) ---
+    if (familias.length) {
+      const filasFam = familias.slice(0, 200).map((f, i) => [
+        i + 1, f.etiqueta, f.partidas.length, f.monto, f.pct / 100, f.mejorRank, listaPartidas(f.partidas),
+      ]);
+      XLSX.utils.book_append_sheet(
+        wb,
+        hojaTabla(["#", "Familia (código o descripción)", "Partidas", "Monto total", "% del presupuesto", "Mejor ranking individual", "Partidas incluidas"],
+          filasFam, [6, 40, 10, 16, 16, 20, 70], { 3: FMT_MONTO, 4: FMT_PCT }),
+        "Familias de Partidas"
+      );
+    }
+
+    // --- Cronograma, Flujo de Caja y Curva de Avance: solo con plazo definido ---
+    if (hayPlazo) {
+      // El cronograma se exporta VIVO: la columna de inicio y la de fin son fórmulas, de modo que
+      // al cambiar la duración de una fase en Excel, las siguientes se desplazan y el diagrama de
+      // Gantt se redibuja solo, sin tener que volver a Cimbra.
+      const filasCrono = cronograma.map((f) => [
+        f.name, aUnidadEd(f.inicio), aUnidadEd(f.dias), aUnidadEd(f.fin), f.monto, f.pct, listaPartidas(f.partidas),
+      ]);
+      const wsCrono = hojaTabla(
+        ["Fase", "Inicio (" + unidadAbrev + ")", "Duración (" + unidadAbrev + ")", "Fin (" + unidadAbrev + ")", "Monto", "% del presupuesto", "Partidas incluidas"],
+        filasCrono, [40, 14, 16, 13, 16, 16, 70], { 4: FMT_MONTO, 5: FMT_PCT }
+      );
+      const factorTxt = String(Math.round(factorSolape * 1000) / 1000);
+      filasCrono.forEach((filaCrono, i) => {
+        const r = i + 2; // fila de Excel (1 es el encabezado)
+        if (i > 0) {
+          wsCrono[XLSX.utils.encode_cell({ r: r - 1, c: 1 })] = {
+            t: "n", f: "B" + (r - 1) + "+C" + (r - 1) + "*" + factorTxt, v: filaCrono[1],
+            s: { alignment: { horizontal: "right" } },
+          };
+        }
+        wsCrono[XLSX.utils.encode_cell({ r: r - 1, c: 3 })] = {
+          t: "n", f: "B" + r + "+C" + r, v: filaCrono[3],
+          s: { alignment: { horizontal: "right" } },
+        };
+        // La duración es la celda que el profesional edita: se resalta para que se note.
+        estilar(wsCrono, r - 1, 2, { fill: { patternType: "solid", fgColor: { rgb: "FFF7E6" } }, font: { color: { rgb: NAVY } } });
+      });
+      // Bajo la tabla: fin de obra calculado y la instrucción de uso.
+      const rFin = filasCrono.length + 2;
+      wsCrono[XLSX.utils.encode_cell({ r: rFin, c: 0 })] = { t: "s", v: "Fin estimado de la obra (" + unidadAbrev + ")", s: { font: { bold: true, color: { rgb: NAVY } } } };
+      wsCrono[XLSX.utils.encode_cell({ r: rFin, c: 3 })] = { t: "n", f: "MAX(D2:D" + (filasCrono.length + 1) + ")", v: aUnidadEd(Math.max(...cronograma.map((f) => f.fin))), s: { font: { bold: true }, alignment: { horizontal: "right" } } };
+      wsCrono[XLSX.utils.encode_cell({ r: rFin + 2, c: 0 })] = { t: "s", v: "Edita la columna «Duración» (celdas en ámbar) y el inicio de las fases siguientes, el fin de obra y el diagrama de Gantt se recalculan solos." + (solape > 0 ? " El cálculo mantiene el solape de " + solape + "% entre fases que indicaste." : ""), s: { font: { italic: true, sz: 10, color: { rgb: "6B7680" } }, alignment: { wrapText: true, vertical: "top" } } };
+      wsCrono["!merges"] = [{ s: { r: rFin + 2, c: 0 }, e: { r: rFin + 2, c: 6 } }];
+      wsCrono["!rows"] = wsCrono["!rows"] || [];
+      wsCrono["!rows"][rFin + 2] = { hpt: 30 };
+      wsCrono["!ref"] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rFin + 2, c: 6 } });
+      XLSX.utils.book_append_sheet(wb, wsCrono, M.cronograma);
+      const nGantt = Math.min(filasCrono.length, 60);
+      if (nGantt >= 1) {
+        graficos.push({
+          hoja: M.cronograma,
+          xml: ganttXML({
+            hoja: M.cronograma, colCat: "A", colInicio: "B", colDuracion: "C",
+            fila1: 2, filaN: nGantt + 1,
+            titulo: "Cronograma de obra por fases" + (nGantt < filasCrono.length ? " (primeras " + nGantt + ")" : ""),
+            tituloEjeX: unidadLabel.charAt(0).toUpperCase() + unidadLabel.slice(1) + " desde el inicio de la obra",
+          }),
+          col1: 7, fila1: 0, col2: 20, fila2: Math.max(18, nGantt + 4),
+        });
+      }
+
+      const flujoSemanal = calcularFlujo(7, "Semana");
+      const flujoMensual = calcularFlujo(30, "Mes");
+      const flujoAnual = calcularFlujo(365, "Año");
+      [
+        ["Flujo de Caja Semanal", flujoSemanal],
+        ["Flujo de Caja Mensual", flujoMensual],
+        ["Flujo de Caja Anual", flujoAnual],
+      ].forEach(([nombreHoja, filas]) => {
+        let acum = 0;
+        const datos = filas.map((f) => { acum += f.monto; return [f.periodo, Math.round(f.monto), Math.round(acum), f.pctAcum / 100]; });
+        XLSX.utils.book_append_sheet(
+          wb,
+          hojaTabla(["Periodo", "Flujo del período", "Flujo acumulado", "% Acumulado"], datos, [14, 18, 18, 14], { 1: FMT_MONTO, 2: FMT_MONTO, 3: FMT_PCT }),
+          nombreHoja
+        );
+        if (datos.length >= 2) {
+          graficos.push({
+            hoja: nombreHoja,
+            xml: barrasYLineaXML({
+              hoja: nombreHoja, colCat: "A", colBarra: "B", colLinea: "D",
+              fila1: 2, filaN: datos.length + 1,
+              titulo: nombreHoja, formatoBarra: FMT_MONTO,
+              tituloEjeIzq: "Flujo del período", tituloEjeDer: "% acumulado",
+            }),
+            col1: 5, fila1: 0, col2: 17, fila2: 22,
+          });
+        }
+      });
+
+      const curva = flujoMensual.map((f) => [f.periodo, f.pctAcum / 100]);
+      XLSX.utils.book_append_sheet(
+        wb,
+        hojaTabla(["Periodo (mensual)", "% Avance financiero acumulado"], curva, [18, 30], { 1: FMT_PCT }),
+        "Curva de Avance"
+      );
+      if (curva.length >= 2) {
+        graficos.push({
+          hoja: "Curva de Avance",
+          xml: lineaXML({
+            hoja: "Curva de Avance", colCat: "A", colLinea: "B",
+            fila1: 2, filaN: curva.length + 1,
+            titulo: "Curva de avance financiero acumulado", tituloEjeIzq: "% del presupuesto ejecutado",
+          }),
+          col1: 3, fila1: 0, col2: 15, fila2: 22,
+        });
+      }
+    }
+
+    // --- Prioridades de Procura ---
+    const filasCompra = prioridadesCompra.map((p, i) => [
+      i + 1, p.codigo || "", p.name, hayPlazo ? numeroDeMomento(p.inicioFase) : "Plazo no definido", p.fase, p.clase, p.monto, p.pctInd / 100,
+    ]);
+    XLSX.utils.book_append_sheet(
+      wb,
+      hojaTabla(["Prioridad", "Código", "Partida", "Requerida en (" + unidadAbrev + ")", "Fase", "Clase", "Monto", "% Individual"],
+        filasCompra, [10, 14, 60, 18, 32, 8, 16, 13], { 6: FMT_MONTO, 7: FMT_PCT }, 5),
+      M.procura
+    );
 
     // Actividades Críticas está en pausa: no se exporta mientras el módulo no aporte información propia.
     if (MOSTRAR_CRITICAL_ACTIVITIES) {
-      const criticaRows = actividadesCriticas.map((p, i) => ({ Prioridad: i + 1, Partida: p.name, "% del presupuesto": Number(p.pctInd.toFixed(2)), Fase: p.fase, "Día de inicio": p.inicioFase }));
-      const wsCritica = XLSX.utils.json_to_sheet(criticaRows);
-      wsCritica["!cols"] = [{ wch: 10 }, { wch: 40 }, { wch: 16 }, { wch: 32 }, { wch: 12 }];
-      XLSX.utils.book_append_sheet(wb, wsCritica, M.actividadesCriticas);
+      const criticaRows = actividadesCriticas.map((p, i) => [i + 1, p.name, p.pctInd / 100, p.fase, p.inicioFase]);
+      XLSX.utils.book_append_sheet(
+        wb,
+        hojaTabla(["Prioridad", "Partida", "% del presupuesto", "Fase", "Día de inicio"], criticaRows, [10, 40, 16, 32, 12], { 2: FMT_PCT }),
+        M.actividadesCriticas
+      );
     }
 
-    XLSX.writeFile(wb, "cimbra-reporte.xlsx");
+    const nombreArchivo = "cimbra-reporte-" + new Date().toISOString().slice(0, 10) + ".xlsx";
+    try {
+      const bytes = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+      const conGraficos = agregarGraficos(bytes, graficos, hojasCongeladas);
+      const blob = new Blob([conGraficos], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = nombreArchivo;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 2000);
+    } catch (err) {
+      // Si algo falla al incrustar los gráficos, el reporte se descarga igual, solo que sin ellos.
+      XLSX.writeFile(wb, nombreArchivo);
+    }
   };
 
   return (
@@ -425,7 +870,7 @@ export default function AnalisisPareto() {
 
       {total > 0 && (
         <p className="text-sm bg-blue-50 text-blue-900 rounded p-3 mb-4">
-          {porClase.A.length} de {analizadas.length} partidas ({((porClase.A.length / analizadas.length) * 100).toFixed(0)}% del total de partidas) concentran el {analizadas.length ? analizadas.filter(p=>p.clase==="A").reduce((s,p)=>s+p.pctInd,0).toFixed(0) : 0}% del costo del presupuesto. Enfoca ahí tu revisión antes de decidir.
+          {porClase.A.length} de {analizadas.length} partidas ({((porClase.A.length / analizadas.length) * 100).toFixed(0)}% del total de partidas) concentran el {porClase.A.length ? porClase.A[porClase.A.length - 1].pctAcum.toFixed(0) : 0}% del costo del presupuesto. Enfoca ahí tu revisión antes de decidir.
         </p>
       )}
 
@@ -434,6 +879,15 @@ export default function AnalisisPareto() {
         <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} className="text-xs" />
         {importError && <p className="text-xs mt-1" style={{ color: "#b91c1c" }}>{importError}</p>}
         {importInfo && <p className="text-xs mt-1" style={{ color: "#166534" }}>{importInfo}</p>}
+        {lineasDeAjuste.length > 0 && (
+          <label className="flex items-start gap-2 text-xs text-gray-600 mt-2 cursor-pointer">
+            <input type="checkbox" className="mt-0.5" checked={excluirAjustes} onChange={(e) => setExcluirAjustes(e.target.checked)} />
+            <span>
+              Excluir del análisis {lineasDeAjuste.length === 1 ? "la línea de ajuste" : "las " + lineasDeAjuste.length + " líneas de ajuste"} (variación de precios, imprevistos y similares).
+              {" "}Al excluirlas, los porcentajes se calculan solo sobre los trabajos de obra.
+            </span>
+          </label>
+        )}
       </div>
 
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mt-2">Bloque de pre-oferta — para usar antes de presentar la propuesta</p>
@@ -452,12 +906,12 @@ export default function AnalisisPareto() {
               <p className="text-xs text-gray-400 mb-2">Capítulos tomados directamente del archivo importado.</p>
               <div className="mb-6 border border-gray-200 rounded p-3">
                 {costoPorFase.map((f) => (
-                  <div key={f.name} className="flex items-center gap-3 mb-2 text-xs">
+                  <div key={f.key} className="flex items-center gap-3 mb-2 text-xs">
                     <span className="w-52 truncate">{f.name}</span>
                     <div className="flex-1 bg-gray-100 rounded h-4 relative overflow-hidden">
                       <div className="h-4 rounded" style={{ width: (f.pct * 100).toFixed(1) + "%", background: "#3A5A73" }}></div>
                     </div>
-                    <span className="w-28 text-right text-gray-600">{fmt(f.monto)} ({(f.pct * 100).toFixed(1)}%)</span>
+                    <span className="w-28 text-right text-gray-600">{fmt(f.monto)} ({d1((f.pct * 100))}%)</span>
                   </div>
                 ))}
               </div>
@@ -482,31 +936,39 @@ export default function AnalisisPareto() {
         <div className="ml-auto text-right flex items-center gap-4">
           <div>
             <p className="text-xs text-gray-500">Total analizado</p>
-            <p className="text-base font-medium">{fmt(total)}</p>
+            <p className="text-base font-medium leading-tight">{fmt(total)}</p>
+            <p className="text-[10px] text-gray-400">suma de partidas, sin IVA</p>
           </div>
-          <button onClick={handleExport} disabled={total === 0}
-            className="text-xs border border-gray-300 rounded px-3 py-1.5 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed">
-            Descargar reporte completo (Excel)
-          </button>
+          <div className="text-right">
+            <button onClick={handleExport} disabled={total === 0}
+              className="text-xs border border-gray-300 rounded px-3 py-1.5 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed">
+              Descargar reporte completo (Excel)
+            </button>
+            <p className="text-[11px] text-gray-400 mt-1">Con diagrama de Gantt, flujo de caja y curva de avance</p>
+          </div>
         </div>
       </div>
 
       <div className="mb-4 border border-blue-200 rounded p-3 bg-blue-50">
         <div className="flex items-center justify-between mb-1">
           <span className="text-sm font-medium text-blue-900">
-            {M.compresionRevision}: {reviewCompression.toFixed(1)}×
+            {M.compresionRevision}: {analizadas.length ? d1(reviewCompression) + "×" : "—"}
           </span>
           <span className="text-xs text-blue-900">
-            {n80} de {analizadas.length} partidas ({pct80DePartidas.toFixed(0)}%) explican el 80% del valor
+            {analizadas.length ? n80 + " de " + analizadas.length + " partidas (" + pct80DePartidas.toFixed(0) + "%) explican el 80% del valor" : "Se calcula al subir tu presupuesto"}
           </span>
         </div>
         <p className="text-xs mb-2 text-blue-900">
-          Reduce el universo de revisión {reviewCompression.toFixed(1)} veces para cubrir el 80% del valor económico de este presupuesto. Es una lectura descriptiva de este proyecto puntual, no una categoría estadística validada con muchos proyectos.
+          {analizadas.length
+            ? "Reduce el universo de revisión " + d1(reviewCompression) + " veces para cubrir el 80% del valor económico de este presupuesto. Es una lectura descriptiva de este proyecto puntual, no una categoría estadística validada con muchos proyectos."
+            : "Indica cuántas veces se reduce el universo de revisión para cubrir el 80% del valor económico del presupuesto. Sube tu archivo para calcularla."}
         </p>
-        <div className="flex gap-4 text-xs text-blue-900">
-          <span>80% del valor → {n80} partidas ({pct80DePartidas.toFixed(0)}%)</span>
-          <span>90% → {n90} ({analizadas.length ? (n90/analizadas.length*100).toFixed(0) : 0}%)</span>
-        </div>
+        {analizadas.length > 0 && (
+          <div className="flex gap-4 text-xs text-blue-900">
+            <span>80% del valor → {n80} partidas ({pct80DePartidas.toFixed(0)}%)</span>
+            <span>90% → {n90} ({(n90 / analizadas.length * 100).toFixed(0)}%)</span>
+          </div>
+        )}
       </div>
 
       <div className="mb-6 border border-gray-200 rounded p-2">
@@ -526,8 +988,12 @@ export default function AnalisisPareto() {
                 <XAxis dataKey="nombreCorto" angle={-35} textAnchor="end" interval={0} height={70} tick={{ fontSize: 10 }} />
                 <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
                 <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 11 }} />
-                <Tooltip content={<CostDriverTooltip />} />
+                <Tooltip content={<CostDriverTooltip fmt={fmt} />} />
                 <ReferenceLine yAxisId="right" y={umbralA} stroke="#b91c1c" strokeDasharray="4 4" />
+                {partidasMostradas.length > corteRevision && corteRevision > 0 && (
+                  <ReferenceLine yAxisId="left" x={partidasMostradas[corteRevision - 1].nombreCorto} stroke="#C9922B" strokeWidth={2}
+                    label={{ value: "corte de revisión", position: "top", fontSize: 10, fill: "#C9922B" }} />
+                )}
                 <Bar yAxisId="left" dataKey="monto">
                   {partidasMostradas.map((p) => (
                     <Cell key={p.id} fill={claseInfo[p.clase].color} />
@@ -552,7 +1018,7 @@ export default function AnalisisPareto() {
               <option value="todos">Todas ({analizadas.length})</option>
             </select>
           </div>
-          <span className="text-xs text-gray-500">{partidasMostradas.length} partidas representan {pctCubierto.toFixed(1)}% de la oferta</span>
+          <span className="text-xs text-gray-500">{partidasMostradas.length} partidas representan {d1(pctCubierto)}% de la oferta</span>
         </div>
         <div className="grid grid-cols-12 gap-2 text-xs text-gray-500 border-b border-gray-200 pb-1 mb-1">
           <span className="col-span-1">#</span>
@@ -564,15 +1030,16 @@ export default function AnalisisPareto() {
           <span className="col-span-1"></span>
         </div>
         {partidasMostradas.map((p) => (
-          <div key={p.id} className="grid grid-cols-12 gap-2 items-center text-xs py-1 border-b border-gray-100">
+          <Fragment key={p.id}>
+          <div className="grid grid-cols-12 gap-2 items-center text-xs py-1 border-b border-gray-100">
             <span className="col-span-1 text-gray-400">{p.rank}</span>
             <div className="col-span-4 flex items-baseline gap-1.5 min-w-0">
               {p.codigo && <span className="font-mono text-[11px] text-gray-400 shrink-0">{p.codigo}</span>}
               <span className="px-1 min-w-0 flex-1 truncate" title={p.name}>{p.name}</span>
             </div>
             <span className="col-span-2 text-right tabular-nums">{fmt(p.monto)}</span>
-            <span className="col-span-1 text-right text-gray-500">{p.pctInd.toFixed(1)}%</span>
-            <span className="col-span-2 text-right text-gray-500">{p.pctAcum.toFixed(1)}%</span>
+            <span className="col-span-1 text-right text-gray-500">{d1(p.pctInd)}%</span>
+            <span className="col-span-2 text-right text-gray-500">{d1(p.pctAcum)}%</span>
             <span className="col-span-1 text-center">
               <span style={{ background: claseInfo[p.clase].bg, color: claseInfo[p.clase].color }} className="px-2 py-0.5 rounded text-xs font-medium">
                 {p.clase}
@@ -580,6 +1047,24 @@ export default function AnalisisPareto() {
             </span>
             <span className="col-span-1"></span>
           </div>
+          {p.rank === corteRevision && (
+            <div className="my-2 flex items-center gap-3">
+              <span className="h-px flex-1 bg-cimbra-amber" style={{ background: "#C9922B" }}></span>
+              <span className="text-xs font-semibold uppercase tracking-wide whitespace-nowrap" style={{ color: "#C9922B" }}>
+                Hasta aquí llega tu revisión
+              </span>
+              <span className="h-px flex-1" style={{ background: "#C9922B" }}></span>
+            </div>
+          )}
+          {p.rank === corteRevision && (
+            <p className="text-xs text-gray-500 mb-3">
+              Estas {corteRevision} partidas concentran el {porClase.A.length ? porClase.A[porClase.A.length - 1].pctAcum.toFixed(0) : 0}% del valor del presupuesto.
+              {analizadas.length > corteRevision
+                ? " Las " + (analizadas.length - corteRevision) + " restantes suman el " + (100 - (porClase.A[porClase.A.length - 1] ? porClase.A[porClase.A.length - 1].pctAcum : 0)).toFixed(0) + "% y no justifican el mismo nivel de análisis."
+                : ""}
+            </p>
+          )}
+          </Fragment>
         ))}
         </>
         )}
@@ -610,16 +1095,58 @@ export default function AnalisisPareto() {
         )}
       </div>
 
+      {familias.length > 0 && (
+        <div className="mb-6 border border-gray-200 rounded p-3">
+          <h3 className="text-sm font-medium mb-1">Familias de partidas</h3>
+          <p className="text-xs text-gray-500 mb-2">
+            Partidas que comparten el mismo código en tu archivo{analizadas.some((p) => p.codigo) ? "" : " o la misma descripción"}. Una familia puede pesar mucho aunque ninguna de sus partidas destaque por separado.
+            {familiaDestacada
+              ? " Aquí la familia " + familiaDestacada.etiqueta + " suma " + d1(familiaDestacada.pct) + "% del presupuesto, más que la partida individual de mayor peso."
+              : ""}
+          </p>
+          <div className="grid grid-cols-12 gap-2 text-xs text-gray-500 border-b border-gray-200 pb-1 mb-1">
+            <span className="col-span-5">Familia</span>
+            <span className="col-span-2 text-center">Partidas</span>
+            <span className="col-span-3 text-right">Monto total</span>
+            <span className="col-span-2 text-right">% del total</span>
+          </div>
+          {familias.slice(0, 8).map((f) => (
+            <div key={f.clave} className="grid grid-cols-12 gap-2 items-center text-xs py-1 border-b border-gray-100">
+              <span className="col-span-5 truncate" title={f.nombre}>
+                {f.etiqueta !== f.nombre && <span className="font-mono text-[11px] text-gray-400 mr-1.5">{f.etiqueta}</span>}
+                {f.nombre}
+              </span>
+              <span className="col-span-2 text-center text-gray-500">{f.partidas.length}</span>
+              <span className="col-span-3 text-right tabular-nums">{fmt(f.monto)}</span>
+              <span className="col-span-2 text-right text-gray-500">{d1(f.pct)}%</span>
+            </div>
+          ))}
+          {familias.length > 8 && (
+            <p className="text-xs text-gray-400 mt-2">Y {familias.length - 8} familias más en la hoja «Familias de Partidas» del reporte en Excel.</p>
+          )}
+        </div>
+      )}
+
       <h2 className="text-base font-semibold mt-8 mb-1">2. 🏗️ {M.cronograma}</h2>
       <p className="text-xs text-gray-400 mb-2">Útil como anexo de la oferta y también durante la ejecución</p>
       <div className="mb-6 border border-gray-200 rounded p-3">
         {analizadas.length === 0 && <p className="text-xs text-gray-400 italic">Sube un presupuesto para poder estimar un cronograma.</p>}
         {analizadas.length > 0 && (
         <>
-        <div className="flex items-center justify-end gap-4 mb-3">
+        <div className="flex items-center justify-end gap-4 mb-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-500" title="Porcentaje de cada fase que puede ejecutarse en paralelo con la siguiente.">Solape entre fases</label>
+            <select className="border border-gray-200 rounded px-1 py-0.5 text-xs" value={solape} onChange={(e) => setSolape(Number(e.target.value))}>
+              <option value={0}>Sin solape (en secuencia)</option>
+              <option value={15}>15% — solape leve</option>
+              <option value={30}>30% — solape moderado</option>
+              <option value={50}>50% — obra muy solapada</option>
+            </select>
+          </div>
           <div className="flex items-center gap-2">
             <label className="text-xs text-gray-500">Unidad</label>
-            <select className="border border-gray-200 rounded px-1 py-0.5 text-xs" value={unidadEfectiva} onChange={(e) => setUnidadTiempo(e.target.value)}>
+            <select className="border border-gray-200 rounded px-1 py-0.5 text-xs" value={unidadEfectiva}
+              onChange={(e) => { setUnidadTiempo(e.target.value); setUnidadElegida(true); }}>
               <option value="semanas">Semanas</option>
               <option value="meses">Meses</option>
               <option value="años" disabled={!aniosDisponible}>Años{aniosDisponible ? "" : " (plazo menor a 1 año)"}</option>
@@ -640,10 +1167,22 @@ export default function AnalisisPareto() {
         {plazoTotal !== null && plazoTotal > 0 && (
         <>
         <p className="text-xs text-gray-500 mb-3">
-          La duración de cada fase se estima en proporción al peso de sus partidas dentro del presupuesto total, no a partir de rendimientos reales de cuadrilla. Si ya tienes fechas y duraciones reales de tu propio cronograma (en Primavera, Project o Excel), edita la semana de inicio y la duración en semanas de cada fase abajo; el {M.flujoCaja} y las {M.procura} usarán esos valores en lugar de los calculados automáticamente.
+          {huboMinimo ? "Las fases de menor peso reciben una duración mínima para que el cronograma sea ejecutable, y el conjunto se reajusta al plazo que indicaste. " : ""}
+          {solape > 0 ? "Cada fase arranca cuando la anterior lleva " + (100 - solape) + "% de avance, según el solape que elegiste. " : ""}
+          La duración de cada fase se estima en proporción al peso de sus partidas dentro del presupuesto total, no a partir de rendimientos reales de cuadrilla. Si ya tienes fechas y duraciones reales de tu propio cronograma (en Primavera, Project o Excel), edita el inicio y la duración de cada fase abajo (en {unidadLabel}); el {M.flujoCaja} y las {M.procura} usarán esos valores en lugar de los calculados automáticamente.
         </p>
         {cronograma.length > 0 && (
           <>
+            <div className="flex items-baseline justify-between mb-2 text-xs">
+              <span className="text-gray-600">
+                Fin estimado de la obra: <strong className="font-semibold">{aUnidadEd(finDeObra)} {unidadLabel}</strong>
+              </span>
+              {Math.abs(finDeObra - plazoTotal) > Math.max(diasPorUnidad, plazoTotal * 0.02) && (
+                <span style={{ color: "#92400e" }}>
+                  {finDeObra > plazoTotal ? "Excede" : "Se queda corto frente a"} el plazo indicado de {aUnidad(plazoTotal)} {unidadLabel} en {d1(Math.abs(finDeObra - plazoTotal) / diasPorUnidad)} {unidadLabel}; ajusta duraciones o el plazo.
+                </span>
+              )}
+            </div>
             <ResponsiveContainer width="100%" height={cronograma.length * (cronograma.length > 25 ? 18 : 40) + 40}>
               <BarChart data={cronogramaDisplay} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -656,28 +1195,28 @@ export default function AnalisisPareto() {
             </ResponsiveContainer>
             <div className="mt-3">
               {cronograma.map((f) => (
-                <div key={f.name} className="mb-2 border-t border-gray-100 pt-2">
+                <div key={f.key} className="mb-2 border-t border-gray-100 pt-2">
                   <div className="flex items-center justify-between text-xs mb-1">
                     <span className="font-medium">{f.name}</span>
                     <span className="flex items-center gap-2 text-gray-500">
-                      Inicio (sem.)
+                      Inicio ({unidadAbrev})
                       <input type="number" step="any" onWheel={(e) => e.currentTarget.blur()} className="w-14 border border-gray-200 rounded px-1 py-0.5 text-right"
-                        value={aSemanas(f.inicio)}
-                        onChange={(e) => setInicioManual((m) => ({ ...m, [f.name]: Math.max(0, semanasADias(Number(e.target.value) || 0)) }))} />
+                        value={aUnidadEd(f.inicio)}
+                        onChange={(e) => setInicioManual((m) => ({ ...m, [f.key]: Math.max(0, unidadEdADias(Number(e.target.value) || 0)) }))} />
                       {f.esManualInicio && (
                         <button className="text-blue-600 hover:underline"
-                          onClick={() => setInicioManual((m) => { const c = { ...m }; delete c[f.name]; return c; })}>
+                          onClick={() => setInicioManual((m) => { const c = { ...m }; delete c[f.key]; return c; })}>
                           inicio auto
                         </button>
                       )}
-                      Duración (sem.)
+                      Duración ({unidadAbrev})
                       <input type="number" step="any" onWheel={(e) => e.currentTarget.blur()} className="w-14 border border-gray-200 rounded px-1 py-0.5 text-right"
-                        value={aSemanas(f.dias)}
-                        onChange={(e) => setDuracionManual((m) => ({ ...m, [f.name]: Math.max(1, semanasADias(Number(e.target.value) || 1)) }))} />
-                      <span className="text-gray-400">→ termina sem. {aSemanas(f.fin)}</span>
+                        value={aUnidadEd(f.dias)}
+                        onChange={(e) => setDuracionManual((m) => ({ ...m, [f.key]: Math.max(1, unidadEdADias(Number(e.target.value) || 1)) }))} />
+                      <span className="text-gray-400">→ termina en {aUnidadEd(f.fin)}</span>
                       {f.esManualDuracion && (
                         <button className="text-blue-600 hover:underline"
-                          onClick={() => setDuracionManual((m) => { const c = { ...m }; delete c[f.name]; return c; })}>
+                          onClick={() => setDuracionManual((m) => { const c = { ...m }; delete c[f.key]; return c; })}>
                           duración auto
                         </button>
                       )}
@@ -730,7 +1269,7 @@ export default function AnalisisPareto() {
             <XAxis dataKey="periodo" tick={{ fontSize: 11 }} angle={numPeriodos > 8 ? -35 : 0} textAnchor={numPeriodos > 8 ? "end" : "middle"} height={numPeriodos > 8 ? 55 : 30} />
             <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
             <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 11 }} />
-            <Tooltip formatter={(v, n) => (n === "pctAcum" ? v.toFixed(1) + "%" : fmt(v))} />
+            <Tooltip formatter={(v, n) => (String(n).startsWith("Avance") ? d1(v) + "%" : fmt(v))} />
             <Bar yAxisId="left" dataKey="monto" fill="#3A5A73" name="Flujo de caja del período" />
             <Line yAxisId="right" dataKey="pctAcum" stroke="#111827" strokeWidth={2} dot={{ r: 3 }} name="Avance físico-financiero acumulado" />
           </ComposedChart>
@@ -745,11 +1284,13 @@ export default function AnalisisPareto() {
         <p className="text-xs text-gray-500 mb-3">
           Partidas de alto o medio impacto económico (clase A y B), ordenadas por cuándo se necesitan según el cronograma. No distinguen todavía si el insumo es de entrega larga o inmediata; úsalas como guía de orden de compra y aplica tu propio criterio sobre cuáles requieren más antelación.
         </p>
-        {prioridadesCompra.length === 0 && <p className="text-xs text-gray-400 italic">No se detectaron partidas de compra crítica con la información actual.</p>}
+        {analizadas.length === 0 && <p className="text-xs text-gray-400 italic">Sube un presupuesto para ver las prioridades de procura.</p>}
+        {analizadas.length > 0 && !hayPlazo && <p className="text-xs text-gray-400 italic mb-2">Define el plazo total en {M.cronograma} (módulo 2) para ver la semana en que se necesita cada partida.</p>}
+        {analizadas.length > 0 && prioridadesCompra.length === 0 && <p className="text-xs text-gray-400 italic">No se detectaron partidas de compra crítica con la información actual.</p>}
         {prioridadesCompra.map((p, i) => (
           <div key={p.id} className="flex items-center justify-between text-xs mb-1.5 border-b border-gray-100 pb-1.5">
             <span>{i + 1}. {p.codigo ? p.codigo + " — " : ""}{encabezado(p.name, 70)}</span>
-            <span className="text-gray-500">Necesario desde la semana {semanaDeDia(p.inicioFase)} · fase {p.fase} · clase {p.clase}</span>
+            <span className="text-gray-500">{hayPlazo ? "Necesario desde la " + momentoDeDia(p.inicioFase) + " · " : ""}fase {p.fase} · clase {p.clase}</span>
           </div>
         ))}
       </div>
@@ -765,7 +1306,7 @@ export default function AnalisisPareto() {
             {actividadesCriticas.map((p, i) => (
               <div key={p.id} className="flex items-center justify-between text-xs mb-1.5 border-b border-gray-100 pb-1.5">
                 <span>{i + 1}. {p.codigo ? p.codigo + " — " : ""}{encabezado(p.name, 70)}</span>
-                <span className="text-gray-500">{p.pctInd.toFixed(1)}% del presupuesto · fase {p.fase} · semana {semanaDeDia(p.inicioFase)}</span>
+                <span className="text-gray-500">{d1(p.pctInd)}% del presupuesto · fase {p.fase} · {momentoDeDia(p.inicioFase)}</span>
               </div>
             ))}
           </div>
@@ -774,12 +1315,8 @@ export default function AnalisisPareto() {
 
       <h2 className="text-base font-semibold mt-6 mb-2">5. 📑 {M.reporteEjecutivo}</h2>
       <div className="mb-6 border border-gray-200 rounded p-3 bg-gray-50">
-        <p className="text-sm text-gray-800 leading-relaxed">
-          El presupuesto analizado asciende a {fmt(total)}, distribuido en {analizadas.length} partidas y {cronograma.length} fases constructivas{plazoTotal ? ", con un plazo estimado de " + plazoTexto(plazoTotal) : " (plazo aún no definido en " + M.cronograma + ")"}.
-          {" "}Este presupuesto tiene una {M.compresionRevision} de {reviewCompression.toFixed(1)}×: {n80} partidas ({pct80DePartidas.toFixed(0)}%) explican el 80% del valor total.
-          {" "}{porClase.A.length} partidas de clase A concentran la mayor parte del impacto financiero y deben revisarse con prioridad, siendo "{encabezado(analizadas.find(p=>p.clase==="A")?.name, 60) || "—"}" la de mayor peso individual.
-          {" "}{plazoTotal && <>El período de mayor exigencia de flujo de caja es {picoFlujo?.periodo || "—"}, con un desembolso estimado de {picoFlujo ? fmt(picoFlujo.monto) : "$0"}. </>}
-          {prioridadesCompra.length > 0 && <>La primera orden de compra a colocar es "{encabezado(prioridadesCompra[0].name, 60)}", requerida desde la semana {semanaDeDia(prioridadesCompra[0].inicioFase)}.</>}
+        <p className={analizadas.length ? "text-sm text-gray-800 leading-relaxed" : "text-xs text-gray-400 italic"}>
+          {analizadas.length ? textoEjecutivo : "Sube un presupuesto para generar el reporte ejecutivo."}
         </p>
       </div>
     </div>
