@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ComposedChart, BarChart, Bar, Cell, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer } from "recharts";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
 import { MODULOS as M } from "./textos.js";
 
 let idCounter = 1;
@@ -8,7 +8,11 @@ const newId = () => idCounter++;
 
 const initialPartidas = [];
 
-const fmt = (n) => "$" + Math.round(n || 0).toLocaleString("en-US");
+// Formato numérico en español, igual que la landing ("5,3×", "$1.234.567"):
+// coma decimal y punto de miles. Solo afecta lo que se ve en pantalla; los Excel
+// exportados guardan números reales y Excel los muestra según la configuración regional del usuario.
+const fmt = (n) => "$" + Math.round(n || 0).toLocaleString("de-DE");
+const d1 = (n) => (Number.isFinite(n) ? n : 0).toFixed(1).replace(".", ",");
 
 function truncar(s, n = 70) {
   const str = String(s || "");
@@ -98,7 +102,7 @@ function CostDriverTooltip({ active, payload }) {
     <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, padding: "8px 10px", fontSize: 12, maxWidth: 280, boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>
       {p.codigo && <div style={{ color: "#6B7680", fontFamily: "monospace", fontSize: 11, marginBottom: 2 }}>{p.codigo}</div>}
       <div style={{ fontWeight: 500, marginBottom: 4 }}>{p.name}</div>
-      <div style={{ color: "#374151" }}>{fmt(p.monto)} · {p.pctInd.toFixed(1)}% individual · {p.pctAcum.toFixed(1)}% acumulado</div>
+      <div style={{ color: "#374151" }}>{fmt(p.monto)} · {d1(p.pctInd)}% individual · {d1(p.pctAcum)}% acumulado</div>
     </div>
   );
 }
@@ -345,77 +349,199 @@ export default function AnalisisPareto() {
 
   const picoFlujo = flujoCaja.length ? flujoCaja.reduce((max, f) => (f.monto > max.monto ? f : max), flujoCaja[0]) : null;
 
-  const handleExport = () => {
-    const rows = analizadas.map((p) => ({
-      Ranking: p.rank,
-      Partida: p.name,
-      Monto: p.monto,
-      "% Individual": Number(p.pctInd.toFixed(2)),
-      "% Acumulado": Number(p.pctAcum.toFixed(2)),
-      Clase: p.clase,
-    }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    ws["!cols"] = [{ wch: 10 }, { wch: 40 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 8 }];
-    XLSX.utils.sheet_add_json(ws, [
-      {},
-      { Ranking: M.compresionRevision, Partida: reviewCompression.toFixed(1) + "×" },
-      { Ranking: "Partidas para 80%", Partida: n80, Monto: pct80DePartidas.toFixed(0) + "%" },
-      { Ranking: "Partidas para 90%", Partida: n90, Monto: (analizadas.length ? (n90/analizadas.length*100) : 0).toFixed(0) + "%" },
-    ], { origin: -1, skipHeader: true });
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Cost Drivers");
+  const hayPlazo = plazoTotal !== null && plazoTotal > 0;
+  const primeraClaseA = analizadas.find((p) => p.clase === "A");
 
-    const cronoRows = cronograma.map((f) => ({
-      Fase: f.name,
-      "Semana inicio": semanaDeDia(f.inicio),
-      "Duración (semanas)": aSemanas(f.dias),
-      "Día inicio": f.inicio,
-      "Día fin": f.fin,
-      "Duración (días)": f.dias,
-      Monto: f.monto,
-      Partidas: f.partidas.map((p) => p.name).join(", "),
-    }));
-    const ws2 = XLSX.utils.json_to_sheet(cronoRows);
-    ws2["!cols"] = [{ wch: 30 }, { wch: 12 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 60 }];
-    XLSX.utils.book_append_sheet(wb, ws2, "Cronograma de Obra");
+  // Texto del Reporte Ejecutivo: el mismo en pantalla y en el Excel.
+  const textoEjecutivo = [
+    "El presupuesto analizado asciende a " + fmt(total) + ", distribuido en " + analizadas.length + " partidas y " + cronograma.length + " fases constructivas" + (hayPlazo ? ", con un plazo estimado de " + plazoTexto(plazoTotal) : " (plazo aún no definido en " + M.cronograma + ")") + ".",
+    "Este presupuesto tiene una " + M.compresionRevision + " de " + d1(reviewCompression) + "×: " + n80 + " partidas (" + pct80DePartidas.toFixed(0) + "%) explican el 80% del valor total.",
+    porClase.A.length + " partidas de clase A concentran la mayor parte del impacto financiero y deben revisarse con prioridad" + (primeraClaseA ? ", siendo \"" + encabezado(primeraClaseA.name, 60) + "\" la de mayor peso individual." : "."),
+    hayPlazo && picoFlujo ? "El período de mayor exigencia de flujo de caja es " + picoFlujo.periodo + ", con un desembolso estimado de " + fmt(picoFlujo.monto) + "." : null,
+    hayPlazo && prioridadesCompra.length > 0 ? "La primera orden de compra a colocar es \"" + encabezado(prioridadesCompra[0].name, 60) + "\", requerida desde la semana " + semanaDeDia(prioridadesCompra[0].inicioFase) + "." : null,
+  ].filter(Boolean).join(" ");
 
-    const flujoSemanal = calcularFlujo(7, "Semana");
-    const flujoMensual = calcularFlujo(30, "Mes");
-    const flujoAnual = calcularFlujo(365, "Año");
-    [
-      ["Flujo de Caja Semanal", flujoSemanal],
-      ["Flujo de Caja Mensual", flujoMensual],
-      ["Flujo de Caja Anual", flujoAnual],
-    ].forEach(([sheetName, filas]) => {
-      const filaRows = filas.map((f) => ({
-        Periodo: f.periodo,
-        "Flujo del período": Math.round(f.monto),
-        "% Acumulado": Number(f.pctAcum.toFixed(2)),
-      }));
-      const wsF = XLSX.utils.json_to_sheet(filaRows);
-      wsF["!cols"] = [{ wch: 14 }, { wch: 16 }, { wch: 14 }];
-      XLSX.utils.book_append_sheet(wb, wsF, sheetName);
+  const NAVY = "1C2B39";
+  const AMBAR = "C9922B";
+  const borde = { style: "thin", color: { rgb: "D1D5DB" } };
+  const bordes = { top: borde, bottom: borde, left: borde, right: borde };
+  const estiloEncabezado = {
+    font: { bold: true, color: { rgb: "FFFFFF" }, name: "Arial", sz: 10 },
+    fill: { patternType: "solid", fgColor: { rgb: NAVY } },
+    alignment: { horizontal: "center", vertical: "center", wrapText: true },
+    border: bordes,
+  };
+  const estiloClase = {
+    A: { font: { bold: true, color: { rgb: "B91C1C" } }, fill: { patternType: "solid", fgColor: { rgb: "FEE2E2" } } },
+    B: { font: { bold: true, color: { rgb: "92400E" } }, fill: { patternType: "solid", fgColor: { rgb: "FEF3C7" } } },
+    C: { font: { bold: true, color: { rgb: "374151" } }, fill: { patternType: "solid", fgColor: { rgb: "F3F4F6" } } },
+  };
+  const FMT_MONTO = '"$"#,##0';
+  const FMT_PCT = "0.0%";
+
+  const estilar = (ws, r, c, extra) => {
+    const a = XLSX.utils.encode_cell({ r, c });
+    if (!ws[a]) return;
+    ws[a].s = { ...(ws[a].s || {}), ...extra };
+  };
+
+  // Hoja de tabla: encabezado de marca, anchos, formatos numéricos y filtro.
+  // `formatos` asigna un formato de número por índice de columna.
+  const hojaTabla = (encabezados, filas, anchos, formatos = {}, colClase = -1) => {
+    const ws = XLSX.utils.aoa_to_sheet([encabezados, ...filas]);
+    ws["!cols"] = anchos.map((wch) => ({ wch }));
+    ws["!rows"] = [{ hpt: 30 }];
+    encabezados.forEach((_, c) => estilar(ws, 0, c, estiloEncabezado));
+    filas.forEach((fila, i) => {
+      fila.forEach((valor, c) => {
+        const a = XLSX.utils.encode_cell({ r: i + 1, c });
+        if (!ws[a]) return;
+        if (formatos[c]) ws[a].z = formatos[c];
+        if (c === 0 && typeof valor === "number") ws[a].s = { alignment: { horizontal: "center" } };
+        if (c === colClase && estiloClase[valor]) {
+          ws[a].s = { ...estiloClase[valor], alignment: { horizontal: "center" } };
+        }
+      });
     });
+    if (filas.length) {
+      ws["!autofilter"] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: filas.length, c: encabezados.length - 1 } }) };
+    }
+    return ws;
+  };
 
-    const curvaRows = flujoCaja.map((f) => ({ Periodo: f.periodo, "% Avance financiero acumulado": Number(f.pctAcum.toFixed(2)) }));
-    const wsCurva = XLSX.utils.json_to_sheet(curvaRows);
-    wsCurva["!cols"] = [{ wch: 14 }, { wch: 24 }];
-    XLSX.utils.book_append_sheet(wb, wsCurva, "Curva de Avance");
+  // Un texto de celda no puede pasar de 32.767 caracteres: se resume la lista de partidas por fase.
+  const listaPartidas = (partidas) => resumirNombres(partidas, 25, (p) => (p.codigo ? p.codigo + " " : "") + encabezado(p.name, 60));
 
-    const compraRows = prioridadesCompra.map((p, i) => ({ Prioridad: i + 1, Partida: p.name, "Semana requerida": semanaDeDia(p.inicioFase), "Día requerido": p.inicioFase, Fase: p.fase, Clase: p.clase }));
-    const wsCompra = XLSX.utils.json_to_sheet(compraRows);
-    wsCompra["!cols"] = [{ wch: 10 }, { wch: 40 }, { wch: 16 }, { wch: 14 }, { wch: 32 }, { wch: 8 }];
-    XLSX.utils.book_append_sheet(wb, wsCompra, M.procura);
+  const handleExport = () => {
+    const fecha = new Date().toLocaleDateString("es", { year: "numeric", month: "long", day: "numeric" });
+    const wb = XLSX.utils.book_new();
+
+    // --- Hoja 1: Resumen ---
+    const filasResumen = [
+      ["Cimbra — Inteligencia de costos"],
+      ["Reporte de análisis de presupuesto · " + fecha],
+      [],
+      ["Total analizado", total],
+      ["Partidas con valor", analizadas.length],
+      [M.compresionRevision, Number(reviewCompression.toFixed(2))],
+      ["Partidas que concentran el 80% del valor", n80, analizadas.length ? n80 / analizadas.length : 0],
+      ["Partidas que concentran el 90% del valor", n90, analizadas.length ? n90 / analizadas.length : 0],
+      ["Umbral clase A / clase B", umbralA + "% / " + umbralB + "%"],
+      ["Partidas clase A", porClase.A.length],
+      ["Plazo total estimado", hayPlazo ? plazoTexto(plazoTotal) : "No definido"],
+      [],
+      [M.reporteEjecutivo],
+      [textoEjecutivo],
+      [],
+      ["Cómo leer este reporte"],
+      ["Cimbra te dice DÓNDE mirar: las partidas de clase A concentran el mayor valor económico y merecen tu revisión primero. Tu software de estimación te permite decidir CÓMO cambiarlo. El criterio final sobre precios, alcance y compras es siempre del profesional."],
+      ["El cronograma es una aproximación por fases proporcional al peso económico; no es un cronograma CPM (sin dependencias ni ruta crítica)."],
+    ];
+    if (!hayPlazo) {
+      filasResumen.push([], ["Este reporte se descargó sin plazo total, por lo que no incluye Cronograma de Obra, Flujo de Caja ni Curva de Avance. Define el plazo en el módulo " + M.cronograma + " y vuelve a descargar para incluirlos."]);
+    }
+    const wsResumen = XLSX.utils.aoa_to_sheet(filasResumen);
+    wsResumen["!cols"] = [{ wch: 46 }, { wch: 18 }, { wch: 14 }];
+    wsResumen["!merges"] = [];
+    const combinar = (r) => wsResumen["!merges"].push({ s: { r, c: 0 }, e: { r, c: 2 } });
+    estilar(wsResumen, 0, 0, { font: { bold: true, sz: 16, color: { rgb: NAVY }, name: "Arial" } });
+    estilar(wsResumen, 1, 0, { font: { italic: true, sz: 10, color: { rgb: "6B7680" }, name: "Arial" } });
+    for (let r = 3; r <= 10; r++) {
+      estilar(wsResumen, r, 0, { font: { bold: true, color: { rgb: NAVY } }, border: bordes });
+      estilar(wsResumen, r, 1, { alignment: { horizontal: "right" }, border: bordes });
+    }
+    wsResumen[XLSX.utils.encode_cell({ r: 3, c: 1 })].z = FMT_MONTO;
+    wsResumen[XLSX.utils.encode_cell({ r: 5, c: 1 })].z = '0.0"×"';
+    ["6", "7"].forEach((r) => {
+      wsResumen[XLSX.utils.encode_cell({ r: Number(r), c: 2 })].z = "0%";
+      estilar(wsResumen, Number(r), 2, { alignment: { horizontal: "right" }, border: bordes });
+    });
+    [12, 15].forEach((r) => estilar(wsResumen, r, 0, { font: { bold: true, sz: 12, color: { rgb: AMBAR } }, border: { bottom: { style: "medium", color: { rgb: AMBAR } } } }));
+    [13, 16, 17, 19].forEach((r) => {
+      if (!wsResumen[XLSX.utils.encode_cell({ r, c: 0 })]) return;
+      combinar(r);
+      estilar(wsResumen, r, 0, { alignment: { wrapText: true, vertical: "top" }, font: { name: "Arial", sz: 10 } });
+    });
+    wsResumen["!rows"] = [];
+    wsResumen["!rows"][13] = { hpt: 78 };
+    wsResumen["!rows"][16] = { hpt: 62 };
+    wsResumen["!rows"][17] = { hpt: 32 };
+    wsResumen["!rows"][19] = { hpt: 46 };
+    XLSX.utils.book_append_sheet(wb, wsResumen, "Resumen");
+
+    // --- Hoja 2: Cost Drivers ---
+    const conCodigo = analizadas.some((p) => p.codigo);
+    const encCD = ["Ranking"].concat(conCodigo ? ["Código"] : [], ["Partida"], usaCategoriasReales ? ["Capítulo"] : [], ["Monto", "% Individual", "% Acumulado", "Clase"]);
+    const filasCD = analizadas.map((p) =>
+      [p.rank].concat(conCodigo ? [p.codigo || ""] : [], [p.name], usaCategoriasReales ? [p.categoria || ""] : [], [p.monto, p.pctInd / 100, p.pctAcum / 100, p.clase])
+    );
+    const iMonto = encCD.indexOf("Monto");
+    const anchosCD = encCD.map((h) => ({ Ranking: 9, "Código": 14, Partida: 60, "Capítulo": 26, Monto: 16, "% Individual": 13, "% Acumulado": 13, Clase: 8 }[h]));
+    XLSX.utils.book_append_sheet(
+      wb,
+      hojaTabla(encCD, filasCD, anchosCD, { [iMonto]: FMT_MONTO, [iMonto + 1]: FMT_PCT, [iMonto + 2]: FMT_PCT }, iMonto + 3),
+      M.costDrivers
+    );
+
+    // --- Cronograma, Flujo de Caja y Curva de Avance: solo con plazo definido ---
+    if (hayPlazo) {
+      const filasCrono = cronograma.map((f) => [
+        f.name, semanaDeDia(f.inicio), aSemanas(f.dias), f.inicio, f.fin, f.dias, f.monto, f.pct, listaPartidas(f.partidas),
+      ]);
+      XLSX.utils.book_append_sheet(
+        wb,
+        hojaTabla(["Fase", "Semana inicio", "Duración (semanas)", "Día inicio", "Día fin", "Duración (días)", "Monto", "% del presupuesto", "Partidas incluidas"],
+          filasCrono, [34, 12, 16, 10, 10, 14, 16, 14, 70], { 6: FMT_MONTO, 7: FMT_PCT }),
+        M.cronograma
+      );
+
+      const flujoSemanal = calcularFlujo(7, "Semana");
+      const flujoMensual = calcularFlujo(30, "Mes");
+      const flujoAnual = calcularFlujo(365, "Año");
+      [
+        ["Flujo de Caja Semanal", flujoSemanal],
+        ["Flujo de Caja Mensual", flujoMensual],
+        ["Flujo de Caja Anual", flujoAnual],
+      ].forEach(([nombreHoja, filas]) => {
+        let acum = 0;
+        const datos = filas.map((f) => { acum += f.monto; return [f.periodo, Math.round(f.monto), Math.round(acum), f.pctAcum / 100]; });
+        XLSX.utils.book_append_sheet(
+          wb,
+          hojaTabla(["Periodo", "Flujo del período", "Flujo acumulado", "% Acumulado"], datos, [14, 18, 18, 14], { 1: FMT_MONTO, 2: FMT_MONTO, 3: FMT_PCT }),
+          nombreHoja
+        );
+      });
+
+      const curva = flujoMensual.map((f) => [f.periodo, f.pctAcum / 100]);
+      XLSX.utils.book_append_sheet(
+        wb,
+        hojaTabla(["Periodo (mensual)", "% Avance financiero acumulado"], curva, [18, 30], { 1: FMT_PCT }),
+        "Curva de Avance"
+      );
+    }
+
+    // --- Prioridades de Procura ---
+    const filasCompra = prioridadesCompra.map((p, i) => [
+      i + 1, p.codigo || "", p.name, hayPlazo ? semanaDeDia(p.inicioFase) : "Plazo no definido", p.fase, p.clase, p.monto, p.pctInd / 100,
+    ]);
+    XLSX.utils.book_append_sheet(
+      wb,
+      hojaTabla(["Prioridad", "Código", "Partida", "Semana requerida", "Fase", "Clase", "Monto", "% Individual"],
+        filasCompra, [10, 14, 60, 18, 32, 8, 16, 13], { 6: FMT_MONTO, 7: FMT_PCT }, 5),
+      M.procura
+    );
 
     // Actividades Críticas está en pausa: no se exporta mientras el módulo no aporte información propia.
     if (MOSTRAR_CRITICAL_ACTIVITIES) {
-      const criticaRows = actividadesCriticas.map((p, i) => ({ Prioridad: i + 1, Partida: p.name, "% del presupuesto": Number(p.pctInd.toFixed(2)), Fase: p.fase, "Día de inicio": p.inicioFase }));
-      const wsCritica = XLSX.utils.json_to_sheet(criticaRows);
-      wsCritica["!cols"] = [{ wch: 10 }, { wch: 40 }, { wch: 16 }, { wch: 32 }, { wch: 12 }];
-      XLSX.utils.book_append_sheet(wb, wsCritica, M.actividadesCriticas);
+      const criticaRows = actividadesCriticas.map((p, i) => [i + 1, p.name, p.pctInd / 100, p.fase, p.inicioFase]);
+      XLSX.utils.book_append_sheet(
+        wb,
+        hojaTabla(["Prioridad", "Partida", "% del presupuesto", "Fase", "Día de inicio"], criticaRows, [10, 40, 16, 32, 12], { 2: FMT_PCT }),
+        M.actividadesCriticas
+      );
     }
 
-    XLSX.writeFile(wb, "cimbra-reporte.xlsx");
+    XLSX.writeFile(wb, "cimbra-reporte-" + new Date().toISOString().slice(0, 10) + ".xlsx");
   };
 
   return (
@@ -457,7 +583,7 @@ export default function AnalisisPareto() {
                     <div className="flex-1 bg-gray-100 rounded h-4 relative overflow-hidden">
                       <div className="h-4 rounded" style={{ width: (f.pct * 100).toFixed(1) + "%", background: "#3A5A73" }}></div>
                     </div>
-                    <span className="w-28 text-right text-gray-600">{fmt(f.monto)} ({(f.pct * 100).toFixed(1)}%)</span>
+                    <span className="w-28 text-right text-gray-600">{fmt(f.monto)} ({d1((f.pct * 100))}%)</span>
                   </div>
                 ))}
               </div>
@@ -494,19 +620,23 @@ export default function AnalisisPareto() {
       <div className="mb-4 border border-blue-200 rounded p-3 bg-blue-50">
         <div className="flex items-center justify-between mb-1">
           <span className="text-sm font-medium text-blue-900">
-            {M.compresionRevision}: {reviewCompression.toFixed(1)}×
+            {M.compresionRevision}: {analizadas.length ? d1(reviewCompression) + "×" : "—"}
           </span>
           <span className="text-xs text-blue-900">
-            {n80} de {analizadas.length} partidas ({pct80DePartidas.toFixed(0)}%) explican el 80% del valor
+            {analizadas.length ? n80 + " de " + analizadas.length + " partidas (" + pct80DePartidas.toFixed(0) + "%) explican el 80% del valor" : "Se calcula al subir tu presupuesto"}
           </span>
         </div>
         <p className="text-xs mb-2 text-blue-900">
-          Reduce el universo de revisión {reviewCompression.toFixed(1)} veces para cubrir el 80% del valor económico de este presupuesto. Es una lectura descriptiva de este proyecto puntual, no una categoría estadística validada con muchos proyectos.
+          {analizadas.length
+            ? "Reduce el universo de revisión " + d1(reviewCompression) + " veces para cubrir el 80% del valor económico de este presupuesto. Es una lectura descriptiva de este proyecto puntual, no una categoría estadística validada con muchos proyectos."
+            : "Indica cuántas veces se reduce el universo de revisión para cubrir el 80% del valor económico del presupuesto. Sube tu archivo para calcularla."}
         </p>
-        <div className="flex gap-4 text-xs text-blue-900">
-          <span>80% del valor → {n80} partidas ({pct80DePartidas.toFixed(0)}%)</span>
-          <span>90% → {n90} ({analizadas.length ? (n90/analizadas.length*100).toFixed(0) : 0}%)</span>
-        </div>
+        {analizadas.length > 0 && (
+          <div className="flex gap-4 text-xs text-blue-900">
+            <span>80% del valor → {n80} partidas ({pct80DePartidas.toFixed(0)}%)</span>
+            <span>90% → {n90} ({(n90 / analizadas.length * 100).toFixed(0)}%)</span>
+          </div>
+        )}
       </div>
 
       <div className="mb-6 border border-gray-200 rounded p-2">
@@ -552,7 +682,7 @@ export default function AnalisisPareto() {
               <option value="todos">Todas ({analizadas.length})</option>
             </select>
           </div>
-          <span className="text-xs text-gray-500">{partidasMostradas.length} partidas representan {pctCubierto.toFixed(1)}% de la oferta</span>
+          <span className="text-xs text-gray-500">{partidasMostradas.length} partidas representan {d1(pctCubierto)}% de la oferta</span>
         </div>
         <div className="grid grid-cols-12 gap-2 text-xs text-gray-500 border-b border-gray-200 pb-1 mb-1">
           <span className="col-span-1">#</span>
@@ -571,8 +701,8 @@ export default function AnalisisPareto() {
               <span className="px-1 min-w-0 flex-1 truncate" title={p.name}>{p.name}</span>
             </div>
             <span className="col-span-2 text-right tabular-nums">{fmt(p.monto)}</span>
-            <span className="col-span-1 text-right text-gray-500">{p.pctInd.toFixed(1)}%</span>
-            <span className="col-span-2 text-right text-gray-500">{p.pctAcum.toFixed(1)}%</span>
+            <span className="col-span-1 text-right text-gray-500">{d1(p.pctInd)}%</span>
+            <span className="col-span-2 text-right text-gray-500">{d1(p.pctAcum)}%</span>
             <span className="col-span-1 text-center">
               <span style={{ background: claseInfo[p.clase].bg, color: claseInfo[p.clase].color }} className="px-2 py-0.5 rounded text-xs font-medium">
                 {p.clase}
@@ -730,7 +860,7 @@ export default function AnalisisPareto() {
             <XAxis dataKey="periodo" tick={{ fontSize: 11 }} angle={numPeriodos > 8 ? -35 : 0} textAnchor={numPeriodos > 8 ? "end" : "middle"} height={numPeriodos > 8 ? 55 : 30} />
             <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
             <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 11 }} />
-            <Tooltip formatter={(v, n) => (n === "pctAcum" ? v.toFixed(1) + "%" : fmt(v))} />
+            <Tooltip formatter={(v, n) => (String(n).startsWith("Avance") ? d1(v) + "%" : fmt(v))} />
             <Bar yAxisId="left" dataKey="monto" fill="#3A5A73" name="Flujo de caja del período" />
             <Line yAxisId="right" dataKey="pctAcum" stroke="#111827" strokeWidth={2} dot={{ r: 3 }} name="Avance físico-financiero acumulado" />
           </ComposedChart>
@@ -745,11 +875,13 @@ export default function AnalisisPareto() {
         <p className="text-xs text-gray-500 mb-3">
           Partidas de alto o medio impacto económico (clase A y B), ordenadas por cuándo se necesitan según el cronograma. No distinguen todavía si el insumo es de entrega larga o inmediata; úsalas como guía de orden de compra y aplica tu propio criterio sobre cuáles requieren más antelación.
         </p>
-        {prioridadesCompra.length === 0 && <p className="text-xs text-gray-400 italic">No se detectaron partidas de compra crítica con la información actual.</p>}
+        {analizadas.length === 0 && <p className="text-xs text-gray-400 italic">Sube un presupuesto para ver las prioridades de procura.</p>}
+        {analizadas.length > 0 && !hayPlazo && <p className="text-xs text-gray-400 italic mb-2">Define el plazo total en {M.cronograma} (módulo 2) para ver la semana en que se necesita cada partida.</p>}
+        {analizadas.length > 0 && prioridadesCompra.length === 0 && <p className="text-xs text-gray-400 italic">No se detectaron partidas de compra crítica con la información actual.</p>}
         {prioridadesCompra.map((p, i) => (
           <div key={p.id} className="flex items-center justify-between text-xs mb-1.5 border-b border-gray-100 pb-1.5">
             <span>{i + 1}. {p.codigo ? p.codigo + " — " : ""}{encabezado(p.name, 70)}</span>
-            <span className="text-gray-500">Necesario desde la semana {semanaDeDia(p.inicioFase)} · fase {p.fase} · clase {p.clase}</span>
+            <span className="text-gray-500">{hayPlazo ? "Necesario desde la semana " + semanaDeDia(p.inicioFase) + " · " : ""}fase {p.fase} · clase {p.clase}</span>
           </div>
         ))}
       </div>
@@ -765,7 +897,7 @@ export default function AnalisisPareto() {
             {actividadesCriticas.map((p, i) => (
               <div key={p.id} className="flex items-center justify-between text-xs mb-1.5 border-b border-gray-100 pb-1.5">
                 <span>{i + 1}. {p.codigo ? p.codigo + " — " : ""}{encabezado(p.name, 70)}</span>
-                <span className="text-gray-500">{p.pctInd.toFixed(1)}% del presupuesto · fase {p.fase} · semana {semanaDeDia(p.inicioFase)}</span>
+                <span className="text-gray-500">{d1(p.pctInd)}% del presupuesto · fase {p.fase} · semana {semanaDeDia(p.inicioFase)}</span>
               </div>
             ))}
           </div>
@@ -774,12 +906,8 @@ export default function AnalisisPareto() {
 
       <h2 className="text-base font-semibold mt-6 mb-2">5. 📑 {M.reporteEjecutivo}</h2>
       <div className="mb-6 border border-gray-200 rounded p-3 bg-gray-50">
-        <p className="text-sm text-gray-800 leading-relaxed">
-          El presupuesto analizado asciende a {fmt(total)}, distribuido en {analizadas.length} partidas y {cronograma.length} fases constructivas{plazoTotal ? ", con un plazo estimado de " + plazoTexto(plazoTotal) : " (plazo aún no definido en " + M.cronograma + ")"}.
-          {" "}Este presupuesto tiene una {M.compresionRevision} de {reviewCompression.toFixed(1)}×: {n80} partidas ({pct80DePartidas.toFixed(0)}%) explican el 80% del valor total.
-          {" "}{porClase.A.length} partidas de clase A concentran la mayor parte del impacto financiero y deben revisarse con prioridad, siendo "{encabezado(analizadas.find(p=>p.clase==="A")?.name, 60) || "—"}" la de mayor peso individual.
-          {" "}{plazoTotal && <>El período de mayor exigencia de flujo de caja es {picoFlujo?.periodo || "—"}, con un desembolso estimado de {picoFlujo ? fmt(picoFlujo.monto) : "$0"}. </>}
-          {prioridadesCompra.length > 0 && <>La primera orden de compra a colocar es "{encabezado(prioridadesCompra[0].name, 60)}", requerida desde la semana {semanaDeDia(prioridadesCompra[0].inicioFase)}.</>}
+        <p className={analizadas.length ? "text-sm text-gray-800 leading-relaxed" : "text-xs text-gray-400 italic"}>
+          {analizadas.length ? textoEjecutivo : "Sube un presupuesto para generar el reporte ejecutivo."}
         </p>
       </div>
     </div>

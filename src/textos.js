@@ -28,6 +28,7 @@ export const CORREO_CONTACTO = "contacto@cimbrapro.com";
 
 export const LANDING = {
   cta: "Probar gratis",
+  etiqueta: "Inteligencia de costos",
   mensaje10s: "Tu software calcula el presupuesto. Cimbra te ayuda a saber dónde mirar.",
   apoyo:
     "Sube tu presupuesto en Excel y descubre en segundos qué partidas concentran el valor de tu obra, antes de comprometerte con la oferta.",

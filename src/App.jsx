@@ -1,12 +1,29 @@
 import AnalisisPareto from "./AnalisisPareto.jsx";
-import logoPrincipal from "./assets/cimbra-logo-principal.svg";
-import logoHorizontal from "./assets/cimbra-logo-horizontal.svg";
+import logoHero from "./assets/cimbra-web-hero.svg";
+import logoHeader from "./assets/cimbra-web-header.svg";
 import { LANDING as T, WHATSAPP_NUMERO, WHATSAPP_MENSAJE, CORREO_CONTACTO } from "./textos.js";
 
 const YEAR = new Date().getFullYear();
 const whatsappUrl = WHATSAPP_NUMERO
   ? "https://wa.me/" + WHATSAPP_NUMERO + "?text=" + encodeURIComponent(WHATSAPP_MENSAJE)
   : null;
+
+// Términos clave que nunca deben partirse entre dos renglones ("Cost / Drivers").
+// Se unen con espacio duro y se resaltan en negrita dentro de los textos largos.
+const TERMINOS_CLAVE = /(Cost Drivers|Compresión de Revisión)/g;
+function Texto({ children }) {
+  return String(children)
+    .split(TERMINOS_CLAVE)
+    .map((parte, i) =>
+      i % 2 === 1 ? (
+        <strong key={i} className="font-semibold text-cimbra-dark whitespace-nowrap">
+          {parte.replace(/ /g, "\u00A0")}
+        </strong>
+      ) : (
+        parte
+      )
+    );
+}
 
 const btnCta =
   "inline-block bg-cimbra-amber text-white font-medium rounded-lg hover:opacity-90 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cimbra-dark";
@@ -17,7 +34,7 @@ export default function App() {
       {/* Barra superior */}
       <header className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-gray-100">
         <div className="max-w-5xl mx-auto px-4 py-2 flex items-center justify-between">
-          <img src={logoHorizontal} alt="Cimbra" className="h-7 w-auto" />
+          <img src={logoHeader} alt="Cimbra" className="h-9 w-auto" />
           <nav className="flex items-center gap-4 text-sm">
             <a href="#que-es" className="hidden sm:inline text-gray-600 hover:text-cimbra-dark">Qué es</a>
             <a href="#preguntas" className="hidden sm:inline text-gray-600 hover:text-cimbra-dark">Preguntas</a>
@@ -26,14 +43,19 @@ export default function App() {
         </div>
       </header>
 
-      {/* Encabezado: logo, mensaje de 10 segundos, una línea de apoyo y el botón */}
+      {/* Encabezado: logo, "inteligencia de costos" legible, mensaje de 10 segundos, apoyo y botón */}
       <section className="bg-[#F7F5F1] blueprint-grid border-b border-gray-200">
-        <div className="max-w-5xl mx-auto px-4 py-6 md:py-8 flex flex-col items-center text-center">
-          <img src={logoPrincipal} alt="Cimbra — inteligencia de costos" className="h-16 w-auto mb-3" />
-          <h1 className="text-lg md:text-xl font-semibold leading-snug max-w-xl text-cimbra-dark">
+        <div className="max-w-5xl mx-auto px-4 py-5 md:py-7 flex flex-col items-center text-center">
+          <img src={logoHero} alt="Cimbra" className="h-24 md:h-28 w-auto" />
+          <p className="mt-1 flex items-center gap-3 text-cimbra-dark font-semibold uppercase tracking-[0.16em] sm:tracking-[0.22em] text-xs sm:text-sm md:text-base">
+            <span aria-hidden="true" className="hidden sm:block h-px w-10 md:w-14 bg-cimbra-amber"></span>
+            {T.etiqueta}
+            <span aria-hidden="true" className="hidden sm:block h-px w-10 md:w-14 bg-cimbra-amber"></span>
+          </p>
+          <h1 className="mt-4 text-lg md:text-2xl font-semibold leading-snug max-w-2xl text-balance text-cimbra-dark">
             {T.mensaje10s}
           </h1>
-          <p className="mt-2 text-sm text-gray-600 max-w-lg leading-relaxed">{T.apoyo}</p>
+          <p className="mt-2 text-sm md:text-base text-gray-600 max-w-xl leading-relaxed text-balance">{T.apoyo}</p>
           <a href="#herramienta" className={btnCta + " mt-4 px-5 py-2.5"}>{T.cta}</a>
         </div>
       </section>
@@ -46,7 +68,7 @@ export default function App() {
             {T.bloques.map((b, i) => (
               <div key={b.titulo} className={i === 0 ? "md:col-span-2 pb-5 border-b border-gray-200" : ""}>
                 <h3 className="text-base font-semibold mb-1.5">{b.titulo}</h3>
-                <p className="text-gray-700 text-sm leading-relaxed">{b.texto}</p>
+                <p className="text-gray-700 text-sm leading-relaxed"><Texto>{b.texto}</Texto></p>
               </div>
             ))}
           </div>
@@ -61,7 +83,7 @@ export default function App() {
                 </div>
               ))}
             </div>
-            <p className="text-gray-700 text-sm leading-relaxed">{T.casoTexto}</p>
+            <p className="text-gray-700 text-sm leading-relaxed"><Texto>{T.casoTexto}</Texto></p>
           </div>
         </div>
       </section>
@@ -87,7 +109,7 @@ export default function App() {
                 {f.p}
                 <span className="text-cimbra-amber text-lg leading-none transition group-open:rotate-45">+</span>
               </summary>
-              <p className="mt-2 text-sm text-gray-700 leading-relaxed">{f.r}</p>
+              <p className="mt-2 text-sm text-gray-700 leading-relaxed"><Texto>{f.r}</Texto></p>
             </details>
           ))}
         </div>
