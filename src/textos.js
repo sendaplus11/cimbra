@@ -101,6 +101,10 @@ export const LANDING = {
       r: "No. Es una aproximación temprana por fases, con duraciones en proporción al peso económico de cada fase. No calcula dependencias, holguras ni ruta crítica. Si ya tienes fechas reales, puedes editar el inicio y la duración de cada fase.",
     },
     {
+      p: "¿Qué incluye el reporte en Excel?",
+      r: "Una hoja de resumen con el reporte ejecutivo y un gráfico de las partidas de mayor peso, el ranking completo de Cost Drivers, el cronograma de obra con su diagrama de Gantt, el flujo de caja semanal, mensual y anual con sus gráficos, la curva de avance financiero y las prioridades de procura. Los gráficos vienen dentro del archivo, listos para anexar a tu oferta.",
+    },
+    {
       p: "¿Cómo se calcula el flujo de caja?",
       r: "Se distribuye el monto de cada fase a lo largo de su duración en el cronograma y se agrupa por semana, mes o año. Es un flujo estimado: mientras más ajustes el cronograma con tus fechas reales, más se acerca a tu proyecto.",
     },
