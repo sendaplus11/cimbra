@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import AnalisisPareto from "./AnalisisPareto.jsx";
 import Legal from "./Legal.jsx";
+import { iniciarMedicion, registrarEvento, observarSecciones } from "./medicion.js";
 import logoHero from "./assets/cimbra-web-hero.svg";
 import logoHeader from "./assets/cimbra-web-header.svg";
 import vistaEjemplo from "./assets/ejemplo-resultado.jpg";
@@ -44,13 +45,28 @@ function usarHash() {
 }
 
 // El botón "Ver ejemplo" le pide a la herramienta que cargue el presupuesto de ejemplo.
-function verEjemplo(e) {
+function verEjemplo(e, ubicacion) {
   e.preventDefault();
+  registrarEvento("clic_ver_ejemplo", { ubicacion });
   window.dispatchEvent(new Event("cimbra:ejemplo"));
 }
 
+// Clic en un botón que lleva a la herramienta (se registra desde qué parte de la página).
+const clicProbar = (ubicacion) => () => registrarEvento("clic_probar", { ubicacion });
+
+const SECCIONES_MEDIDAS = ["como-funciona", "caso-real", "nucleo", "vista-previa", "herramienta", "complementarios", "que-es", "fundador", "preguntas", "cta-final"];
+
 export default function App() {
   const hash = usarHash();
+  const esLegal = hash === "#/privacidad" || hash === "#/terminos";
+  useEffect(() => { iniciarMedicion(); }, []);
+  useEffect(() => {
+    if (esLegal) {
+      registrarEvento("pagina_legal_vista", { pagina: hash.slice(2) });
+      return undefined;
+    }
+    return observarSecciones(SECCIONES_MEDIDAS);
+  }, [hash, esLegal]);
   if (hash === "#/privacidad") return <Legal tipo="privacidad" />;
   if (hash === "#/terminos") return <Legal tipo="terminos" />;
 
@@ -64,7 +80,7 @@ export default function App() {
             <a href="#que-es" className="hidden sm:inline text-gray-600 hover:text-cimbra-dark">Qué es</a>
             <a href="#caso-real" className="hidden sm:inline text-gray-600 hover:text-cimbra-dark">Caso real</a>
             <a href="#preguntas" className="hidden sm:inline text-gray-600 hover:text-cimbra-dark">Preguntas</a>
-            <a href="#herramienta" className={btnCta + " text-sm px-4 py-1.5 rounded"}>{T.cta}</a>
+            <a href="#herramienta" onClick={clicProbar("barra_superior")} className={btnCta + " text-sm px-4 py-1.5 rounded"}>{T.cta}</a>
           </nav>
         </div>
       </header>
@@ -83,15 +99,15 @@ export default function App() {
           </h1>
           <p className="mt-2 text-sm md:text-base text-gray-600 max-w-xl leading-relaxed text-balance">{T.apoyo}</p>
           <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
-            <a href="#herramienta" className={btnCta + " px-5 py-2.5"}>{T.ctaPrincipal}</a>
-            <a href="#herramienta" onClick={verEjemplo} className={btnSecundario + " px-5 py-2.5"}>{T.ctaEjemplo}</a>
+            <a href="#herramienta" onClick={clicProbar("portada")} className={btnCta + " px-5 py-2.5"}>{T.ctaPrincipal}</a>
+            <a href="#herramienta" onClick={(e) => verEjemplo(e, "portada")} className={btnSecundario + " px-5 py-2.5"}>{T.ctaEjemplo}</a>
           </div>
           <p className="mt-3 text-xs text-gray-500 max-w-xl">{T.lineaConfianza}</p>
         </div>
       </section>
 
       {/* Cómo funciona */}
-      <section className="max-w-5xl mx-auto px-4 pt-10 pb-6">
+      <section id="como-funciona" className="max-w-5xl mx-auto px-4 pt-10 pb-6">
         <h2 className="text-xl font-semibold mb-1 text-center">{T.pasosTitulo}</h2>
         <p className="text-gray-500 text-sm text-center mb-6">{T.pasosSubtitulo}</p>
         <div className="grid md:grid-cols-3 gap-4">
@@ -120,12 +136,12 @@ export default function App() {
           </div>
           <p className="text-gray-700 text-sm leading-relaxed"><Texto>{T.casoTexto}</Texto></p>
           <p className="text-gray-700 text-sm leading-relaxed mt-2 font-medium">{T.casoDestacado}</p>
-          <a href="#herramienta" className={btnCta + " mt-4 text-sm px-4 py-2"}>{T.casoCta}</a>
+          <a href="#herramienta" onClick={clicProbar("caso_referencia")} className={btnCta + " mt-4 text-sm px-4 py-2"}>{T.casoCta}</a>
         </div>
       </section>
 
       {/* El núcleo */}
-      <section className="max-w-5xl mx-auto px-4 pb-8">
+      <section id="nucleo" className="max-w-5xl mx-auto px-4 pb-8">
         <h2 className="text-xl font-semibold mb-1 text-center">{T.nucleoTitulo}</h2>
         <p className="text-gray-500 text-sm text-center mb-6">{T.nucleoSubtitulo}</p>
         <div className="grid md:grid-cols-3 gap-4">
@@ -139,7 +155,7 @@ export default function App() {
       </section>
 
       {/* Qué obtendrás: captura real del resultado */}
-      <section className="bg-[#F7F5F1] border-y border-gray-200">
+      <section id="vista-previa" className="bg-[#F7F5F1] border-y border-gray-200">
         <div className="max-w-5xl mx-auto px-4 py-10">
           <h2 className="text-xl font-semibold mb-1 text-center">{T.vistaTitulo}</h2>
           <p className="text-gray-500 text-sm text-center mb-6 max-w-2xl mx-auto">{T.vistaSubtitulo}</p>
@@ -150,29 +166,14 @@ export default function App() {
               ))}
             </ul>
             <div className="md:col-span-5">
-              <a href={vistaEjemplo} target="_blank" rel="noopener noreferrer" title="Abrir la captura en tamaño completo">
+              <a href={vistaEjemplo} target="_blank" rel="noopener noreferrer" title="Abrir la captura en tamaño completo" onClick={() => registrarEvento("captura_ampliada")}>
                 <img src={vistaEjemplo} alt={T.vistaAlt} className="w-full rounded-lg border border-gray-200 shadow-sm bg-white" loading="lazy" />
               </a>
               <p className="text-center mt-3">
-                <a href="#herramienta" onClick={verEjemplo} className={btnSecundario + " text-sm px-4 py-1.5"}>{T.ctaEjemplo} en vivo</a>
+                <a href="#herramienta" onClick={(e) => verEjemplo(e, "vista_previa")} className={btnSecundario + " text-sm px-4 py-1.5"}>{T.ctaEjemplo} en vivo</a>
               </p>
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* Resultados complementarios */}
-      <section className="max-w-5xl mx-auto px-4 py-10">
-        <p className="text-xs font-semibold uppercase tracking-wide text-cimbra-amber text-center mb-1">{T.complementariosEtiqueta}</p>
-        <h2 className="text-xl font-semibold mb-1 text-center">{T.complementariosTitulo}</h2>
-        <p className="text-gray-500 text-sm text-center mb-6 max-w-2xl mx-auto">{T.complementariosSubtitulo}</p>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {T.complementarios.map((c) => (
-            <div key={c.titulo} className="border border-gray-200 rounded-xl p-4 bg-white">
-              <h3 className="text-sm font-semibold mb-1">{c.titulo}</h3>
-              <p className="text-sm text-gray-600 leading-relaxed">{c.texto}</p>
-            </div>
-          ))}
         </div>
       </section>
 
@@ -184,6 +185,21 @@ export default function App() {
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <AnalisisPareto />
           </div>
+        </div>
+      </section>
+
+      {/* Resultados complementarios */}
+      <section id="complementarios" className="max-w-5xl mx-auto px-4 py-10">
+        <p className="text-xs font-semibold uppercase tracking-wide text-cimbra-amber text-center mb-1">{T.complementariosEtiqueta}</p>
+        <h2 className="text-xl font-semibold mb-1 text-center">{T.complementariosTitulo}</h2>
+        <p className="text-gray-500 text-sm text-center mb-6 max-w-2xl mx-auto">{T.complementariosSubtitulo}</p>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {T.complementarios.map((c) => (
+            <div key={c.titulo} className="border border-gray-200 rounded-xl p-4 bg-white">
+              <h3 className="text-sm font-semibold mb-1">{c.titulo}</h3>
+              <p className="text-sm text-gray-600 leading-relaxed">{c.texto}</p>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -206,12 +222,12 @@ export default function App() {
       </section>
 
       {/* Quién está detrás */}
-      <section className="max-w-3xl mx-auto px-4 pb-10 text-center">
+      <section id="fundador" className="max-w-3xl mx-auto px-4 pb-10 text-center">
         <h2 className="text-lg font-semibold mb-2">{T.fundadorTitulo}</h2>
         <p className="text-sm text-gray-700 leading-relaxed">{T.fundadorTexto}</p>
         {LINKEDIN_URL && (
           <p className="mt-3">
-            <a href={LINKEDIN_URL} target="_blank" rel="noopener noreferrer" className="text-cimbra-amber font-medium text-sm hover:underline">
+            <a href={LINKEDIN_URL} target="_blank" rel="noopener noreferrer" onClick={() => registrarEvento("clic_linkedin")} className="text-cimbra-amber font-medium text-sm hover:underline">
               {T.fundadorEnlace} →
             </a>
           </p>
@@ -223,7 +239,7 @@ export default function App() {
         <h2 className="text-xl font-semibold mb-4 text-center">{T.faqTitulo}</h2>
         <div className="divide-y divide-gray-200 border-y border-gray-200">
           {T.faq.map((f) => (
-            <details key={f.p} className="group py-3">
+            <details key={f.p} className="group py-3" onToggle={(e) => { if (e.currentTarget.open) registrarEvento("pregunta_abierta", { pregunta: f.p }); }}>
               <summary className="cursor-pointer list-none flex items-center justify-between gap-4 font-medium text-sm">
                 {f.p}
                 <span className="text-cimbra-amber text-lg leading-none transition group-open:rotate-45">+</span>
@@ -234,7 +250,7 @@ export default function App() {
         </div>
         {whatsappUrl && (
           <div className="text-center mt-6">
-            <a href={whatsappUrl} target="_blank" rel="noopener noreferrer"
+            <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" onClick={() => registrarEvento("clic_whatsapp")}
               className="inline-block border border-cimbra-dark text-cimbra-dark text-sm font-medium px-5 py-2 rounded-lg hover:bg-cimbra-dark hover:text-white transition">
               {T.whatsappTexto}
             </a>
@@ -244,7 +260,7 @@ export default function App() {
           <div className="text-center mt-4">
             <p className="text-sm text-gray-500">
               {T.correoTitulo}{" "}
-              <a href={"mailto:" + CORREO_CONTACTO} className="text-cimbra-amber font-medium hover:underline">
+              <a href={"mailto:" + CORREO_CONTACTO} onClick={() => registrarEvento("clic_correo", { ubicacion: "preguntas" })} className="text-cimbra-amber font-medium hover:underline">
                 {T.correoTexto} {CORREO_CONTACTO}
               </a>
             </p>
@@ -253,11 +269,11 @@ export default function App() {
       </section>
 
       {/* Llamado final */}
-      <section className="bg-[#F7F5F1] border-t border-gray-200">
+      <section id="cta-final" className="bg-[#F7F5F1] border-t border-gray-200">
         <div className="max-w-3xl mx-auto px-4 py-10 text-center">
           <h2 className="text-xl md:text-2xl font-semibold mb-2 text-balance">{T.ctaFinalTitulo}</h2>
           <p className="text-sm text-gray-600 mb-4">{T.ctaFinalTexto}</p>
-          <a href="#herramienta" className={btnCta + " px-5 py-2.5"}>{T.ctaFinalBoton}</a>
+          <a href="#herramienta" onClick={clicProbar("cierre")} className={btnCta + " px-5 py-2.5"}>{T.ctaFinalBoton}</a>
         </div>
       </section>
 
@@ -270,7 +286,7 @@ export default function App() {
           {CORREO_CONTACTO && (
             <>
               {" "}·{" "}
-              <a href={"mailto:" + CORREO_CONTACTO} className="hover:text-cimbra-dark">{CORREO_CONTACTO}</a>
+              <a href={"mailto:" + CORREO_CONTACTO} onClick={() => registrarEvento("clic_correo", { ubicacion: "pie" })} className="hover:text-cimbra-dark">{CORREO_CONTACTO}</a>
             </>
           )}
         </p>
