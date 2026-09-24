@@ -167,9 +167,26 @@ function dibujoXML(anclas) {
  * congelar: ["Nombre de hoja", ...]
  */
 export function agregarGraficos(bytes, graficos, congelar = []) {
-  if (!graficos.length && !congelar.length) return bytes;
   const zip = unzipSync(new Uint8Array(bytes));
   const leer = (n) => strFromU8(zip[n]);
+
+  // Impresión: todas las hojas en horizontal y ajustadas al ancho de una página,
+  // para que al imprimir o pasar a PDF las tablas no se corten en columnas sueltas.
+  Object.keys(zip)
+    .filter((n) => /^xl\/worksheets\/sheet\d+\.xml$/.test(n))
+    .forEach((archivo) => {
+      let x = leer(archivo);
+      if (!/<sheetPr\b/.test(x)) {
+        x = x.replace(/(<worksheet\b[^>]*>)/, '$1<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>');
+      }
+      if (!/<pageSetup\b/.test(x)) {
+        const pagina =
+          '<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>' +
+          '<pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/>';
+        x = /<ignoredErrors\b/.test(x) ? x.replace("<ignoredErrors", pagina + "<ignoredErrors") : x.replace("</worksheet>", pagina + "</worksheet>");
+      }
+      zip[archivo] = strToU8(x);
+    });
 
   // hoja -> archivo xl/worksheets/sheetN.xml
   const wbXml = leer("xl/workbook.xml");
@@ -213,7 +230,7 @@ export function agregarGraficos(bytes, graficos, congelar = []) {
     if (!porHoja.has(g.hoja)) porHoja.set(g.hoja, []);
     porHoja.get(g.hoja).push(g);
   });
-  if (!porHoja.size) return bytes;
+  if (!porHoja.size) return zipSync(zip, { level: 6 });
 
   let nChart = 0;
   let nDrawing = 0;
