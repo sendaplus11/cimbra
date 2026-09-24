@@ -4,6 +4,7 @@ import * as XLSX from "xlsx-js-style";
 import { MODULOS as M } from "./textos.js";
 import { ganttXML, barrasYLineaXML, lineaXML, agregarGraficos } from "./excelGraficos.js";
 import { FILAS_EJEMPLO } from "./ejemploPresupuesto.js";
+import { registrarEvento } from "./medicion.js";
 
 let idCounter = 1;
 const newId = () => idCounter++;
@@ -15,6 +16,14 @@ const initialPartidas = [];
 // exportados guardan números reales y Excel los muestra según la configuración regional del usuario.
 const fmtNum = (n) => Math.round(n || 0).toLocaleString("de-DE");
 const d1 = (n) => (Number.isFinite(n) ? n : 0).toFixed(1).replace(".", ",");
+// Ejes de los gráficos: montos compactos ("1,2 M", "250 mil") y porcentajes enteros ("75%").
+const ejeMonto = (v) => {
+  const a = Math.abs(v);
+  if (a >= 1e6) return (v / 1e6).toFixed(a >= 1e7 ? 0 : 1).replace(".", ",").replace(",0", "") + " M";
+  if (a >= 1e3) return Math.round(v / 1e3) + " mil";
+  return String(Math.round(v));
+};
+const ejePct = (v) => Math.round(v) + "%";
 
 function truncar(s, n = 70) {
   const str = String(s || "");
@@ -29,9 +38,10 @@ function resumirNombres(items, max, formatFn) {
 }
 
 const claseInfo = {
-  A: { color: "#b91c1c", bg: "#fee2e2", label: "Clase A — máximo impacto" },
-  B: { color: "#92400e", bg: "#fef3c7", label: "Clase B — impacto medio" },
-  C: { color: "#374151", bg: "#f3f4f6", label: "Clase C — impacto bajo" },
+  // Clase A en el ámbar de la marca (prioridad, no "error"); B en azul pizarra; C en gris.
+  A: { color: "#8A5A0B", bg: "#FBEFD9", barra: "#C9922B", label: "Clase A — máximo impacto" },
+  B: { color: "#2F4A60", bg: "#E3EBF2", barra: "#3A5A73", label: "Clase B — impacto medio" },
+  C: { color: "#4B5563", bg: "#F3F4F6", barra: "#B8C0C8", label: "Clase C — impacto bajo" },
 };
 
 const fasePorClase = {
@@ -148,6 +158,7 @@ export default function AnalisisPareto() {
   // Avisos de lectura del archivo: partidas sin monto y total declarado en el propio archivo.
   const [avisos, setAvisos] = useState({ sinMonto: 0, totalArchivo: null });
   const [esEjemplo, setEsEjemplo] = useState(false);
+  const [nombreArchivo, setNombreArchivo] = useState("");
   const fmt = (n) => moneda + fmtNum(n);
 
   const analizarBytes = (data) => {
@@ -302,6 +313,10 @@ export default function AnalisisPareto() {
     setImportError("");
     setImportInfo("");
     setEsEjemplo(false);
+    setNombreArchivo(file.name);
+    // Medición: solo se registra que se cargó un archivo, nunca su nombre ni su contenido.
+    registrarEvento("presupuesto_cargado");
+    e.target.value = ""; // permite volver a elegir el mismo archivo
     const reader = new FileReader();
     reader.onload = (evt) => analizarBytes(new Uint8Array(evt.target.result));
     reader.readAsArrayBuffer(file);
@@ -316,12 +331,17 @@ export default function AnalisisPareto() {
     return wb;
   };
   const usarEjemplo = () => {
+    setNombreArchivo("presupuesto-de-ejemplo.xlsx");
+    registrarEvento("ejemplo_cargado");
     const bytes = XLSX.write(libroDeEjemplo(), { type: "array", bookType: "xlsx" });
     analizarBytes(new Uint8Array(bytes));
     setPlazoTotal(360); // el ejemplo trae un plazo de 12 meses para que el cronograma y el flujo de caja se vean completos
     setEsEjemplo(true);
   };
-  const descargarEjemplo = () => XLSX.writeFile(libroDeEjemplo(), "cimbra-presupuesto-de-ejemplo.xlsx");
+  const descargarEjemplo = () => {
+    registrarEvento("formato_ejemplo_descargado");
+    XLSX.writeFile(libroDeEjemplo(), "cimbra-presupuesto-de-ejemplo.xlsx");
+  };
 
   // La página principal puede pedir cargar el ejemplo (botón "Ver ejemplo" del encabezado).
   useEffect(() => {
@@ -509,6 +529,8 @@ export default function AnalisisPareto() {
   const unidadEdADias = (v) => Math.round(v * diasPorUnidad);
   const numeroDeMomento = (dia) => Math.floor(dia / diasPorUnidad) + 1;
   const momentoDeDia = (dia) => UNIDAD_SINGULAR[unidadEfectiva] + " " + numeroDeMomento(dia);
+  // "desde la semana 3", "desde el mes 1", "desde el año 2"
+  const desdeMomento = (dia) => (unidadEfectiva === "semanas" ? "la " : "el ") + momentoDeDia(dia);
   const plazoTexto = (dias) => aUnidad(dias).toLocaleString("es") + " " + unidadLabel;
   const cronogramaDisplay = cronograma.map((f) => ({ ...f, inicio: aUnidad(f.inicio), dias: aUnidad(f.dias) }));
 
@@ -526,7 +548,7 @@ export default function AnalisisPareto() {
         montoPeriodo += overlap * dailyRate;
       });
       acum += montoPeriodo;
-      filas.push({ periodo: label + " " + (i + 1), monto: montoPeriodo, pctAcum: total ? (acum / total) * 100 : 0 });
+      filas.push({ periodo: label + " " + (i + 1), monto: montoPeriodo, pctAcum: total ? Math.min(100, (acum / total) * 100) : 0 });
     }
     return filas;
   }
@@ -568,7 +590,7 @@ export default function AnalisisPareto() {
     "Este presupuesto tiene una " + M.compresionRevision + " de " + d1(reviewCompression) + "×: " + n80 + " partidas (" + pct80DePartidas.toFixed(0) + "%) explican el 80% del valor total.",
     porClase.A.length + " partidas de clase A concentran la mayor parte del impacto financiero y deben revisarse con prioridad" + (primeraClaseA ? ", siendo \"" + encabezado(primeraClaseA.name, 60) + "\" la de mayor peso individual." : "."),
     hayPlazo && picoFlujo ? "El período de mayor exigencia de flujo de caja es " + picoFlujo.periodo + ", con un desembolso estimado de " + fmt(picoFlujo.monto) + "." : null,
-    hayPlazo && prioridadesCompra.length > 0 ? "La primera orden de compra a colocar es \"" + encabezado(prioridadesCompra[0].name, 60) + "\", requerida desde la " + momentoDeDia(prioridadesCompra[0].inicioFase) + "." : null,
+    hayPlazo && prioridadesCompra.length > 0 ? "La primera compra o contratación a gestionar es \"" + encabezado(prioridadesCompra[0].name, 60) + "\", requerida desde " + desdeMomento(prioridadesCompra[0].inicioFase) + "." : null,
   ].filter(Boolean).join(" ");
 
   const NAVY = "1C2B39";
@@ -582,9 +604,9 @@ export default function AnalisisPareto() {
     border: bordes,
   };
   const estiloClase = {
-    A: { font: { bold: true, color: { rgb: "B91C1C" } }, fill: { patternType: "solid", fgColor: { rgb: "FEE2E2" } } },
-    B: { font: { bold: true, color: { rgb: "92400E" } }, fill: { patternType: "solid", fgColor: { rgb: "FEF3C7" } } },
-    C: { font: { bold: true, color: { rgb: "374151" } }, fill: { patternType: "solid", fgColor: { rgb: "F3F4F6" } } },
+    A: { font: { bold: true, color: { rgb: "8A5A0B" } }, fill: { patternType: "solid", fgColor: { rgb: "FBEFD9" } } },
+    B: { font: { bold: true, color: { rgb: "2F4A60" } }, fill: { patternType: "solid", fgColor: { rgb: "E3EBF2" } } },
+    C: { font: { bold: true, color: { rgb: "4B5563" } }, fill: { patternType: "solid", fgColor: { rgb: "F3F4F6" } } },
   };
   const FMT_MONTO = moneda ? '"' + moneda + '"#,##0' : "#,##0";
   const FMT_PCT = "0.0%";
@@ -625,6 +647,7 @@ export default function AnalisisPareto() {
   const colLetra = (i) => XLSX.utils.encode_col(i);
 
   const handleExport = () => {
+    registrarEvento(esEjemplo ? "reporte_excel_descargado_ejemplo" : "reporte_excel_descargado");
     const fecha = new Date().toLocaleDateString("es", { year: "numeric", month: "long", day: "numeric" });
     const wb = XLSX.utils.book_new();
     const graficos = [];
@@ -654,7 +677,7 @@ export default function AnalisisPareto() {
       "Cimbra te dice DÓNDE mirar: las partidas de clase A concentran el mayor valor económico y merecen tu revisión primero. Tu software de estimación te permite decidir CÓMO cambiarlo. El criterio final sobre precios, alcance y compras es siempre del profesional.",
       "El total analizado es la suma de las partidas importadas: no incluye IVA ni otros montos que el archivo sume aparte." +
         (avisos.totalArchivo !== null ? " Coincide con el total indicado en el archivo de origen." : ""),
-      "El cronograma es una aproximación por fases proporcional al peso económico; no es un cronograma CPM (sin dependencias ni ruta crítica).",
+      "El cronograma es una aproximación por fases proporcional al peso económico; no es un cronograma de ruta crítica (CPM): no incluye dependencias entre actividades.",
     ];
     if (huboMinimo && hayPlazo) parrafos.push("Las fases de menor peso recibieron una duración mínima para que el cronograma sea ejecutable; el conjunto se ajusta al plazo indicado.");
     if (solape > 0 && hayPlazo) parrafos.push("El cronograma se calculó con un solape de " + solape + "% entre fases consecutivas, indicado por el usuario.");
@@ -722,12 +745,12 @@ export default function AnalisisPareto() {
 
     // --- Hoja 2: Cost Drivers ---
     const conCodigo = analizadas.some((p) => p.codigo);
-    const encCD = ["Ranking"].concat(conCodigo ? ["Código"] : [], ["Partida"], usarCapitulosParaSchedule ? ["Capítulo"] : [], ["Monto", "% Individual", "% Acumulado", "Clase"]);
+    const encCD = ["Posición"].concat(conCodigo ? ["Código"] : [], ["Partida"], usarCapitulosParaSchedule ? ["Capítulo"] : [], ["Monto", "% Individual", "% Acumulado", "Clase"]);
     const filasCD = analizadas.map((p) =>
       [p.rank].concat(conCodigo ? [p.codigo || ""] : [], [p.name], usarCapitulosParaSchedule ? [p.categoria || ""] : [], [p.monto, p.pctInd / 100, p.pctAcum / 100, p.clase])
     );
     const iMonto = encCD.indexOf("Monto");
-    const anchosCD = encCD.map((h) => ({ Ranking: 9, "Código": 14, Partida: 60, "Capítulo": 26, Monto: 16, "% Individual": 13, "% Acumulado": 13, Clase: 8 }[h]));
+    const anchosCD = encCD.map((h) => ({ "Posición": 9, "Código": 14, Partida: 60, "Capítulo": 26, Monto: 16, "% Individual": 13, "% Acumulado": 13, Clase: 8 }[h]));
     const wsCD = hojaTabla(encCD, filasCD, anchosCD, { [iMonto]: FMT_MONTO, [iMonto + 1]: FMT_PCT, [iMonto + 2]: FMT_PCT }, iMonto + 3);
     // Línea de corte: dónde termina la revisión que vale la pena.
     if (corteRevision > 0 && corteRevision < filasCD.length) {
@@ -755,7 +778,7 @@ export default function AnalisisPareto() {
       ]);
       XLSX.utils.book_append_sheet(
         wb,
-        hojaTabla(["#", "Familia (código o descripción)", "Partidas", "Monto total", "% del presupuesto", "Mejor ranking individual", "Partidas incluidas"],
+        hojaTabla(["#", "Familia (código o descripción)", "Partidas", "Monto total", "% del presupuesto", "Mejor posición individual", "Partidas incluidas"],
           filasFam, [6, 40, 10, 16, 16, 20, 70], { 3: FMT_MONTO, 4: FMT_PCT }),
         "Familias de Partidas"
       );
@@ -907,13 +930,21 @@ export default function AnalisisPareto() {
 
       {total > 0 && (
         <p className="text-sm bg-blue-50 text-blue-900 rounded p-3 mb-4">
-          {porClase.A.length} de {analizadas.length} partidas ({((porClase.A.length / analizadas.length) * 100).toFixed(0)}% del total de partidas) concentran el {porClase.A.length ? porClase.A[porClase.A.length - 1].pctAcum.toFixed(0) : 0}% del costo del presupuesto. Enfoca ahí tu revisión antes de decidir.
+          {porClase.A.length} de {analizadas.length} partidas ({((porClase.A.length / analizadas.length) * 100).toFixed(0)}% del total de partidas) concentran el {porClase.A.length ? porClase.A[porClase.A.length - 1].pctAcum.toFixed(0) : 0}% del valor del presupuesto. Enfoca ahí tu revisión antes de decidir.
         </p>
       )}
 
       <div className="mb-4 bg-gray-50 p-3 rounded border border-gray-200">
         <label className="text-xs text-gray-500 block mb-1">Importar presupuesto de construcción (Excel, .xls o .csv)</label>
-        <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} className="text-xs" />
+        {/* Selector de archivo propio: el control nativo del navegador sale en inglés ("Choose File"). */}
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="inline-flex items-center cursor-pointer rounded px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2"
+            style={{ background: "#1C2B39" }}>
+            Seleccionar archivo
+            <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} className="sr-only" />
+          </label>
+          <span className="text-xs text-gray-500 truncate max-w-full">{nombreArchivo || "Ningún archivo seleccionado"}</span>
+        </div>
         <p className="text-xs text-gray-500 mt-2">Tu archivo se procesa en tu navegador y no se envía a ningún servidor.</p>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs">
           <button type="button" onClick={usarEjemplo} className="font-medium rounded border px-3 py-1 hover:bg-white" style={{ borderColor: "#C9922B", color: "#1C2B39" }}>
@@ -945,7 +976,7 @@ export default function AnalisisPareto() {
 
       {MOSTRAR_COST_ANALYSIS && (
         <>
-          <h2 className="text-base font-semibold mt-2 mb-1">💰 {M.analisisCostos}</h2>
+          <h2 className="text-base font-semibold mt-2 mb-1">{M.analisisCostos}</h2>
           {analizadas.length === 0 && (
             <p className="text-xs text-gray-400 italic mb-6">Sube un presupuesto para ver la distribución por categoría.</p>
           )}
@@ -971,9 +1002,9 @@ export default function AnalisisPareto() {
         </>
       )}
 
-      <h2 className="text-base font-semibold mt-2 mb-2">1. 📊 {M.costDrivers}</h2>
+      <h2 className="text-base font-semibold mt-2 mb-2">1. {M.costDrivers}</h2>
 
-      <div className="flex items-center gap-6 mb-4 bg-gray-50 p-3 rounded border border-gray-200">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3 mb-4 bg-gray-50 p-3 rounded border border-gray-200">
         <div className="flex items-center gap-2">
           <label className="text-xs text-gray-500">Umbral clase A (%)</label>
           <input type="number" onWheel={(e) => e.currentTarget.blur()} className="w-16 border border-gray-200 rounded px-1 py-0.5 text-right"
@@ -984,15 +1015,16 @@ export default function AnalisisPareto() {
           <input type="number" onWheel={(e) => e.currentTarget.blur()} className="w-16 border border-gray-200 rounded px-1 py-0.5 text-right"
             value={umbralB} onChange={(e) => setUmbralB(Number(e.target.value) || 0)} />
         </div>
-        <div className="ml-auto text-right flex items-center gap-4">
+        <div className="w-full sm:w-auto sm:ml-auto flex flex-wrap items-center justify-between sm:justify-end gap-4 sm:text-right">
           <div>
             <p className="text-xs text-gray-500">Total analizado</p>
             <p className="text-base font-medium leading-tight">{fmt(total)}</p>
             <p className="text-[10px] text-gray-400">suma de partidas, sin IVA</p>
           </div>
-          <div className="text-right">
+          <div className="sm:text-right">
             <button onClick={handleExport} disabled={total === 0}
-              className="text-xs border border-gray-300 rounded px-3 py-1.5 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed">
+              className="text-xs font-medium text-white rounded px-3 py-1.5 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ background: "#C9922B" }}>
               Descargar reporte completo (Excel)
             </button>
             <p className="text-[11px] text-gray-400 mt-1">Con diagrama de Gantt, flujo de caja y curva de avance</p>
@@ -1001,7 +1033,7 @@ export default function AnalisisPareto() {
       </div>
 
       <div className="mb-4 border border-blue-200 rounded p-3 bg-blue-50">
-        <div className="flex items-center justify-between mb-1">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mb-1">
           <span className="text-sm font-medium text-blue-900">
             {M.compresionRevision}: {analizadas.length ? d1(reviewCompression) + "×" : "—"}
           </span>
@@ -1015,7 +1047,7 @@ export default function AnalisisPareto() {
             : "Indica cuántas veces se reduce el universo de revisión para cubrir el 80% del valor económico del presupuesto. Sube tu archivo para calcularla."}
         </p>
         {analizadas.length > 0 && (
-          <div className="flex gap-4 text-xs text-blue-900">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-blue-900">
             <span>80% del valor → {n80} partidas ({pct80DePartidas.toFixed(0)}%)</span>
             <span>90% → {n90} ({(n90 / analizadas.length * 100).toFixed(0)}%)</span>
           </div>
@@ -1028,26 +1060,32 @@ export default function AnalisisPareto() {
         ) : (
           <>
             <div className="flex items-center gap-4 px-2 pt-1 pb-2 text-xs text-gray-500">
-              <span className="flex items-center gap-1"><span style={{ width: 10, height: 10, background: claseInfo.A.color, display: "inline-block", borderRadius: 2 }}></span>Clase A</span>
-              <span className="flex items-center gap-1"><span style={{ width: 10, height: 10, background: claseInfo.B.color, display: "inline-block", borderRadius: 2 }}></span>Clase B</span>
-              <span className="flex items-center gap-1"><span style={{ width: 10, height: 10, background: claseInfo.C.color, display: "inline-block", borderRadius: 2 }}></span>Clase C</span>
+              <span className="flex items-center gap-1"><span style={{ width: 10, height: 10, background: claseInfo.A.barra, display: "inline-block", borderRadius: 2 }}></span>Clase A</span>
+              <span className="flex items-center gap-1"><span style={{ width: 10, height: 10, background: claseInfo.B.barra, display: "inline-block", borderRadius: 2 }}></span>Clase B</span>
+              <span className="flex items-center gap-1"><span style={{ width: 10, height: 10, background: claseInfo.C.barra, display: "inline-block", borderRadius: 2 }}></span>Clase C</span>
               <span className="ml-auto">Mostrando {partidasMostradas.length} de {analizadas.length} · Línea: % acumulado</span>
             </div>
             <ResponsiveContainer width="100%" height={280}>
-              <ComposedChart data={partidasMostradas} margin={{ top: 10, right: 20, left: 0, bottom: 40 }}>
+              <ComposedChart data={partidasMostradas} margin={{ top: 10, right: 20, left: 0, bottom: partidasMostradas.length > 12 ? 4 : 30 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="nombreCorto" angle={-35} textAnchor="end" interval={0} height={70} tick={{ fontSize: 10 }} padding={{ left: 40, right: 6 }} />
-                <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
-                <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 11 }} />
+                <XAxis dataKey="nombreCorto" angle={-40} textAnchor="end" height={partidasMostradas.length > 12 ? 44 : 70} tick={{ fontSize: 10 }} padding={{ left: 12, right: 6 }}
+                  interval={partidasMostradas.length > 40 ? "preserveStartEnd" : 0}
+                  tickFormatter={(v) => {
+                    // Con muchas barras, el eje muestra solo el código (o un nombre corto); el nombre completo va en la ayuda al pasar el cursor.
+                    if (partidasMostradas.length <= 12) return v;
+                    return partidasMostradas.every((p) => p.codigo) ? String(v).split(" ")[0] : truncar(v, 14);
+                  }} />
+                <YAxis yAxisId="left" tick={{ fontSize: 11 }} tickFormatter={ejeMonto} width={62} />
+                <YAxis yAxisId="right" orientation="right" domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tick={{ fontSize: 11 }} tickFormatter={ejePct} width={40} />
                 <Tooltip content={<CostDriverTooltip fmt={fmt} />} />
-                <ReferenceLine yAxisId="right" y={umbralA} stroke="#b91c1c" strokeDasharray="4 4" />
+                <ReferenceLine yAxisId="right" y={umbralA} stroke="#9CA3AF" strokeDasharray="4 4" />
                 {partidasMostradas.length > corteRevision && corteRevision > 0 && (
                   <ReferenceLine yAxisId="left" x={partidasMostradas[corteRevision - 1].nombreCorto} stroke="#C9922B" strokeWidth={2}
                     label={{ value: "corte de revisión", position: "top", fontSize: 10, fill: "#C9922B" }} />
                 )}
                 <Bar yAxisId="left" dataKey="monto">
                   {partidasMostradas.map((p) => (
-                    <Cell key={p.id} fill={claseInfo[p.clase].color} />
+                    <Cell key={p.id} fill={claseInfo[p.clase].barra} />
                   ))}
                 </Bar>
                 <Line yAxisId="right" dataKey="pctAcum" stroke="#111827" strokeWidth={2} dot={{ r: 3 }} />
@@ -1060,7 +1098,7 @@ export default function AnalisisPareto() {
       <div className="mb-3">
         {analizadas.length > 0 && (
         <>
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
           <div className="flex items-center gap-2 text-xs">
             <label className="text-gray-500">Mostrar</label>
             <select className="border border-gray-200 rounded px-1 py-0.5" value={topN} onChange={(e) => setTopN(e.target.value)}>
@@ -1182,7 +1220,7 @@ export default function AnalisisPareto() {
         <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#3A5A73" }}>Resultados complementarios</p>
         <p className="text-xs text-gray-500 mt-1 mb-2">A partir del mismo presupuesto, estas herramientas dan una referencia inicial de tiempo, dinero y compras. Son aproximaciones tempranas para apoyar tu oferta; no sustituyen tu programación detallada.</p>
       </div>
-      <h2 className="text-base font-semibold mt-4 mb-1">2. 🏗️ {M.cronograma}</h2>
+      <h2 className="text-base font-semibold mt-4 mb-1">2. {M.cronograma}</h2>
       <p className="text-xs text-gray-400 mb-2">Útil como anexo de la oferta y también durante la ejecución</p>
       <div className="mb-6 border border-gray-200 rounded p-3">
         {analizadas.length === 0 && <p className="text-xs text-gray-400 italic">Sube un presupuesto para poder estimar un cronograma.</p>}
@@ -1251,9 +1289,9 @@ export default function AnalisisPareto() {
             <div className="mt-3">
               {cronograma.map((f) => (
                 <div key={f.key} className="mb-2 border-t border-gray-100 pt-2">
-                  <div className="flex items-center justify-between text-xs mb-1">
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs mb-1">
                     <span className="font-medium">{f.name}</span>
-                    <span className="flex items-center gap-2 text-gray-500">
+                    <span className="flex flex-wrap items-center gap-2 text-gray-500">
                       Inicio ({unidadAbrev})
                       <input type="number" step="any" onWheel={(e) => e.currentTarget.blur()} className="w-14 border border-gray-200 rounded px-1 py-0.5 text-right"
                         value={aUnidadEd(f.inicio)}
@@ -1296,7 +1334,7 @@ export default function AnalisisPareto() {
         )}
       </div>
 
-      <h2 className="text-base font-semibold mt-6 mb-1">3. 📈 {M.flujoCaja}</h2>
+      <h2 className="text-base font-semibold mt-6 mb-1">3. {M.flujoCaja}</h2>
       <p className="text-xs text-gray-400 mb-2">Útil como anexo de la oferta y también durante la ejecución</p>
       <div className="mb-6 border border-gray-200 rounded p-3">
         {(analizadas.length === 0 || plazoTotal === null) ? (
@@ -1322,8 +1360,8 @@ export default function AnalisisPareto() {
           <ComposedChart data={flujoCaja} margin={{ top: 10, right: 20, left: 0, bottom: 30 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
             <XAxis dataKey="periodo" tick={{ fontSize: 11 }} angle={numPeriodos > 8 ? -35 : 0} textAnchor={numPeriodos > 8 ? "end" : "middle"} height={numPeriodos > 8 ? 55 : 30} />
-            <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
-            <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 11 }} />
+            <YAxis yAxisId="left" tick={{ fontSize: 11 }} tickFormatter={ejeMonto} width={62} />
+            <YAxis yAxisId="right" orientation="right" domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tick={{ fontSize: 11 }} tickFormatter={ejePct} width={40} />
             <Tooltip formatter={(v, n) => (String(n).startsWith("Avance") ? d1(v) + "%" : fmt(v))} />
             <Bar yAxisId="left" dataKey="monto" fill="#3A5A73" name="Flujo de caja del período" />
             <Line yAxisId="right" dataKey="pctAcum" stroke="#111827" strokeWidth={2} dot={{ r: 3 }} name="Avance físico-financiero acumulado" />
@@ -1333,26 +1371,26 @@ export default function AnalisisPareto() {
         )}
       </div>
 
-      <h2 className="text-base font-semibold mt-6 mb-1">4. 🛒 {M.procura}</h2>
+      <h2 className="text-base font-semibold mt-6 mb-1">4. {M.procura}</h2>
       <p className="text-xs text-gray-400 mb-2">Ejecución — para usar una vez adjudicado el proyecto</p>
       <div className="mb-6 border border-gray-200 rounded p-3">
         <p className="text-xs text-gray-500 mb-3">
-          Partidas de alto o medio impacto económico (clase A y B), ordenadas por cuándo se necesitan según el cronograma. No distinguen todavía si el insumo es de entrega larga o inmediata; úsalas como guía de orden de compra y aplica tu propio criterio sobre cuáles requieren más antelación.
+          Partidas de alto o medio impacto económico (clase A y B), ordenadas por cuándo se necesitan según el cronograma. Incluyen materiales, equipos y también servicios o subcontratos: Cimbra no distingue todavía qué se compra y qué se contrata, ni si el insumo es de entrega larga o inmediata. Úsalas como guía de orden y aplica tu propio criterio sobre cuáles requieren más antelación.
         </p>
         {analizadas.length === 0 && <p className="text-xs text-gray-400 italic">Sube un presupuesto para ver las prioridades de procura.</p>}
         {analizadas.length > 0 && !hayPlazo && <p className="text-xs text-gray-400 italic mb-2">Define el plazo total en {M.cronograma} (módulo 2) para ver la semana en que se necesita cada partida.</p>}
         {analizadas.length > 0 && prioridadesCompra.length === 0 && <p className="text-xs text-gray-400 italic">No se detectaron partidas de compra crítica con la información actual.</p>}
         {prioridadesCompra.map((p, i) => (
-          <div key={p.id} className="flex items-center justify-between text-xs mb-1.5 border-b border-gray-100 pb-1.5">
+          <div key={p.id} className="flex flex-wrap items-center justify-between gap-x-3 text-xs mb-1.5 border-b border-gray-100 pb-1.5">
             <span>{i + 1}. {p.codigo ? p.codigo + " — " : ""}{encabezado(p.name, 70)}</span>
-            <span className="text-gray-500">{hayPlazo ? "Necesario desde la " + momentoDeDia(p.inicioFase) + " · " : ""}fase {p.fase} · clase {p.clase}</span>
+            <span className="text-gray-500">{hayPlazo ? "Necesaria desde " + desdeMomento(p.inicioFase) + " · " : ""}fase {p.fase} · clase {p.clase}</span>
           </div>
         ))}
       </div>
 
       {MOSTRAR_CRITICAL_ACTIVITIES && (
         <>
-          <h2 className="text-base font-semibold mt-6 mb-1">🎯 {M.actividadesCriticas}</h2>
+          <h2 className="text-base font-semibold mt-6 mb-1">{M.actividadesCriticas}</h2>
           <p className="text-xs text-gray-400 mb-2">Pausado — hoy no aporta información distinta a {M.costDrivers}</p>
           <div className="mb-6 border border-gray-200 rounded p-3">
             <p className="text-xs text-gray-500 mb-3">
@@ -1368,7 +1406,7 @@ export default function AnalisisPareto() {
         </>
       )}
 
-      <h2 className="text-base font-semibold mt-6 mb-2">5. 📑 {M.reporteEjecutivo}</h2>
+      <h2 className="text-base font-semibold mt-6 mb-2">5. {M.reporteEjecutivo}</h2>
       <div className="mb-6 border border-gray-200 rounded p-3 bg-gray-50">
         <p className={analizadas.length ? "text-sm text-gray-800 leading-relaxed" : "text-xs text-gray-400 italic"}>
           {analizadas.length ? textoEjecutivo : "Sube un presupuesto para generar el reporte ejecutivo."}
