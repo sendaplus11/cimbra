@@ -147,7 +147,7 @@ export const LANDING = {
     },
     {
       p: "¿Qué formato debe tener mi archivo?",
-      r: "Excel (.xlsx o .xls) o CSV. Cimbra busca automáticamente una columna con la descripción de la partida (partida, descripción, concepto o actividad) y otra con el monto (total, monto, importe o subtotal). Si el archivo trae una columna de código, también la reconoce. Puedes descargar el archivo de ejemplo para ver el formato. Por ahora no se aceptan archivos PDF.",
+      r: "Excel (.xlsx o .xls) o CSV, en español o en inglés. Cimbra busca automáticamente la columna con la descripción de la partida (descripción, partida, concepto, actividad o description) y la del monto (total, monto, importe o amount). Si el archivo trae cantidad y precio unitario pero no total, calcula el monto multiplicándolos. También reconoce la columna de código o ítem, los montos escritos como 1.234,56 o 1,234.56, los CSV con punto y coma, y busca el presupuesto en la hoja correcta si el libro tiene varias. Si no encuentra encabezados, deduce las columnas por su contenido y te avisa cuáles usó. Puedes descargar el archivo de ejemplo para ver el formato. Por ahora no se aceptan archivos PDF.",
     },
     {
       p: "¿Mi presupuesto se envía a algún servidor?",

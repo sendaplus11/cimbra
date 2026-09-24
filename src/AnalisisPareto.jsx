@@ -5,6 +5,7 @@ import { MODULOS as M } from "./textos.js";
 import { ganttXML, barrasYLineaXML, lineaXML, agregarGraficos } from "./excelGraficos.js";
 import { FILAS_EJEMPLO } from "./ejemploPresupuesto.js";
 import { registrarEvento } from "./medicion.js";
+import { leerPresupuesto } from "./lectorPresupuesto.js";
 
 let idCounter = 1;
 const newId = () => idCounter++;
@@ -50,37 +51,12 @@ const fasePorClase = {
   C: "Bajo impacto individual: usa el precio de referencia disponible sin invertir más tiempo en esta partida.",
 };
 
-const NAME_KEYS = ["partida", "descripcion", "descripción", "concepto", "item", "actividad"];
 const MOSTRAR_CRITICAL_ACTIVITIES = false;
 const MOSTRAR_COST_ANALYSIS = false;
-const CODE_KEYS = ["cod", "código", "nº", "no.", "n°"];
-const AMOUNT_KEYS_PRIORITY = ["total", "monto", "importe", "subtotal", "costo", "precio"];
 
-function prefijoCodigo(codigo) {
-  if (!codigo) return null;
-  const partes = String(codigo).trim().split("-");
-  if (partes.length <= 1) return null;
-  const ultima = partes[partes.length - 1].trim();
-  if (/^\d+(\.\d+)?$/.test(ultima)) {
-    return partes.slice(0, -1).join("-");
-  }
-  return codigo;
-}
-
-// Textos de una sola celda que NO son capítulos (títulos de columna, totales, etc.).
-const NO_ES_CAPITULO = /^(partidas?|descripci[oó]n|[ií]tem|item|total|sub-?total|obra|cliente|servicio|propietario|fecha)\b/i;
-// Filas que traen totales, subtotales o impuestos en la columna de descripción: no son partidas.
-const FILA_DE_TOTAL = /^\s*(i\.?v\.?a\b|impuesto|sub-?total|total\b)/i;
-// Líneas que suelen ser ajustes financieros y no trabajos de obra: se avisan, no se excluyen.
-const LINEA_DE_AJUSTE = /variaci[oó]n de precios|escalaci[oó]n|imprevistos|reajuste de precios|contingencias?\b/i;
 // Normaliza un texto para comparar descripciones: sin acentos, mayúsculas, sin signos.
 function normalizar(t) {
   return String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
-}
-
-// "OBRAS CIVILES - ARQUITECTURA (1 al 127)" -> "OBRAS CIVILES - ARQUITECTURA"
-function limpiarCapitulo(t) {
-  return t.replace(/\s*\(\s*\d+\s*(al|a|-)\s*\d+\s*\)\s*$/i, "").replace(/\s+/g, " ").trim();
 }
 
 function encabezado(s, maxFallback = 55) {
@@ -88,22 +64,6 @@ function encabezado(s, maxFallback = 55) {
   const corte = str.indexOf(".");
   if (corte > 5 && corte < 120) return str.slice(0, corte);
   return truncar(str, maxFallback);
-}
-
-function findKeyIndex(headerRow, keys) {
-  for (let i = 0; i < headerRow.length; i++) {
-    const h = String(headerRow[i] || "").toLowerCase().trim();
-    if (keys.some((k) => h.includes(k))) return i;
-  }
-  return -1;
-}
-
-function findAmountIndex(headerRow) {
-  for (const keyword of AMOUNT_KEYS_PRIORITY) {
-    const idx = findKeyIndex(headerRow, [keyword]);
-    if (idx !== -1) return idx;
-  }
-  return -1;
 }
 
 const PHASE_KEYWORDS = [
@@ -164,147 +124,36 @@ export default function AnalisisPareto() {
   const analizarBytes = (data) => {
     setImportError("");
     setImportInfo("");
-    {
-        try {
-        const wb = XLSX.read(data, { type: "array" });
-        const sheet = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true });
-        if (!rows || rows.length < 2) {
-          setImportError("El archivo no tiene filas suficientes.");
-          return;
-        }
-        let headerRowIdx = 0;
-        let nameIdx = findKeyIndex(rows[0], NAME_KEYS);
-        let amountIdx = findAmountIndex(rows[0]);
-        if (nameIdx === -1 || amountIdx === -1) {
-          for (let r = 0; r < Math.min(20, rows.length); r++) {
-            const ni = findKeyIndex(rows[r], NAME_KEYS);
-            const ai = findAmountIndex(rows[r]);
-            if (ni !== -1 && ai !== -1) {
-              headerRowIdx = r;
-              nameIdx = ni;
-              amountIdx = ai;
-              break;
-            }
-          }
-        }
-        if (nameIdx === -1 || amountIdx === -1) {
-          setImportError("No se detectaron columnas de partida y monto. Verifica los encabezados del archivo.");
-          return;
-        }
-        let codigoIdx = -1;
-        const headerRow = rows[headerRowIdx];
-        for (let i = 0; i < headerRow.length; i++) {
-          if (i === nameIdx || i === amountIdx) continue;
-          const h = String(headerRow[i] || "").toLowerCase().trim();
-          if (CODE_KEYS.some((k) => h.includes(k))) { codigoIdx = i; break; }
-        }
-
-        // Capítulos del archivo: filas con una sola celda de texto (a la izquierda de la descripción
-        // o en ella) y sin monto. Si hay varios niveles, el capítulo es el nivel superior.
-        const esEncabezado = (row) => {
-          const celdas = [];
-          row.forEach((c, j) => { if (c !== null && c !== undefined && String(c).trim() !== "") celdas.push([j, c]); });
-          if (celdas.length !== 1) return null;
-          const [j, c] = celdas[0];
-          const texto = String(c).trim();
-          if (typeof c !== "string" || j > nameIdx || texto.length < 4 || NO_ES_CAPITULO.test(texto)) return null;
-          return { col: j, texto: limpiarCapitulo(texto) };
-        };
-        const encabezados = new Map();
-        for (let r = headerRowIdx + 1; r < rows.length; r++) {
-          if (!rows[r]) continue;
-          const h = esEncabezado(rows[r]);
-          if (h) encabezados.set(r, h);
-        }
-        const colTope = encabezados.size ? Math.min(...[...encabezados.values()].map((h) => h.col)) : -1;
-
-        const nuevas = [];
-        let sinMonto = 0;
-        let capituloActual = null;
-        for (let r = headerRowIdx + 1; r < rows.length; r++) {
-          const row = rows[r];
-          if (!row) continue;
-          const enc = encabezados.get(r);
-          if (enc) {
-            if (enc.col === colTope) capituloActual = enc.texto;
-            continue;
-          }
-          const name = row[nameIdx];
-          const amountRaw = row[amountIdx];
-          const amount = typeof amountRaw === "number" ? amountRaw : parseFloat(String(amountRaw || "").replace(/[^0-9.-]/g, ""));
-          const nombreLimpio = name ? String(name).trim().replace(/^descripci[oó]n\s*:\s*/i, "") : "";
-          // Filas de totales, subtotales o impuestos que algunos presupuestos traen en la columna de descripción.
-          if (!nombreLimpio || FILA_DE_TOTAL.test(nombreLimpio)) continue;
-          const codigo = codigoIdx !== -1 && row[codigoIdx] ? String(row[codigoIdx]).trim() : null;
-          // Partida escrita en el archivo pero con monto cero: puede ser una omisión del presupuesto.
-          if (amount === 0 && (codigo || typeof row[0] === "number")) { sinMonto += 1; continue; }
-          if (isNaN(amount) || amount <= 0) continue;
-          nuevas.push({
-            id: newId(), orden: nuevas.length, name: nombreLimpio, monto: amount, codigo,
-            capitulo: capituloActual, categoria: codigo ? prefijoCodigo(codigo) : null,
-            esAjuste: LINEA_DE_AJUSTE.test(nombreLimpio),
-          });
-        }
-        if (nuevas.length === 0) {
-          setImportError("No se encontraron partidas válidas en el archivo.");
-          return;
-        }
-        // ¿Sirven los capítulos del archivo? Deben ser al menos 2 y agrupar en promedio 2 o más partidas.
-        const capitulosDistintos = new Set(nuevas.map((p) => p.capitulo).filter(Boolean));
-        const usarCapitulos = capitulosDistintos.size >= 2 && nuevas.length / capitulosDistintos.size >= 2;
-        nuevas.forEach((p) => {
-          if (usarCapitulos) p.categoria = p.capitulo || "Otras partidas";
-        });
-
-        // Total declarado por el propio archivo (fila de "Total"): sirve para confirmar la lectura.
-        const totalImportado = nuevas.reduce((s, p) => s + p.monto, 0);
-        let totalArchivo = null;
-        let filasRevisadas = 0;
-        for (let r = rows.length - 1; r >= 0 && totalArchivo === null && filasRevisadas < 40; r--) {
-          const row = rows[r];
-          if (!row || !row.some((c) => c !== null && c !== undefined && String(c).trim() !== "")) continue;
-          filasRevisadas += 1;
-          const hayEtiqueta = row.some((c) => typeof c === "string" && /total|sub-?total/i.test(c));
-          if (!hayEtiqueta) continue;
-          for (const c of row) {
-            if (typeof c === "number" && c > 0 && Math.abs(c - totalImportado) / totalImportado < 0.005) { totalArchivo = c; break; }
-          }
-        }
-        setAvisos({ sinMonto, totalArchivo });
-        setExcluirAjustes(false);
-        setSolape(0);
-
-        const textoContexto = rows.slice(0, headerRowIdx + 1).concat(rows.slice(-25)).flat().filter((c) => typeof c === "string").join(" ");
-        const monedaDetectada = /(^|[^a-zñ])bs\.?([^a-zñ]|$)|bol[ií]vares\b/i.test(textoContexto) ? "Bs. " : /US\$|\bUSD\b|\bd[oó]lares\b|\(\$\)|\$\s*\d/i.test(textoContexto) ? "$" : "";
-        setMoneda(monedaDetectada);
-
-        setPartidas(nuevas);
-        setPlazoTotal(null);
-        setInicioManual({});
-        setDuracionManual({});
-        const totalCategorias = new Set(nuevas.map((p) => p.categoria).filter(Boolean)).size;
-        const ajustes = nuevas.filter((p) => p.esAjuste);
-        const otrasHojas = wb.SheetNames.slice(1).filter((n) => {
-          const ref = wb.Sheets[n] && wb.Sheets[n]["!ref"];
-          if (!ref) return false;
-          const rg = XLSX.utils.decode_range(ref);
-          return rg.e.r - rg.s.r >= 5;
-        });
-        setImportInfo(
-          nuevas.length + " partidas importadas correctamente." +
-          (totalArchivo !== null ? " La suma coincide con el total indicado en el archivo." : "") +
-          (totalCategorias > 1 ? " Se detectaron " + totalCategorias + " capítulos propios del archivo y se usarán para agrupar el " + M.cronograma + "." : "") +
-          (sinMonto ? " " + sinMonto + (sinMonto === 1 ? " partida del archivo no tiene monto y quedó fuera del análisis" : " partidas del archivo no tienen monto y quedaron fuera del análisis") + "; revisa si es una omisión del presupuesto." : "") +
-          (ajustes.length
-            ? " Atención: " + ajustes.length + (ajustes.length === 1 ? " línea parece un ajuste" : " líneas parecen ajustes") + " y no un trabajo de obra («" + ajustes.map((p) => truncar(p.name, 40)).join("», «") + "», " + d1((ajustes.reduce((s, p) => s + p.monto, 0) / totalImportado) * 100) + "% del total); se incluye en el análisis, revísala."
-            : "") +
-          (otrasHojas.length ? " El archivo tiene otras hojas con datos (" + otrasHojas.join(", ") + "); se analizó solo la primera («" + wb.SheetNames[0] + "»)." : "")
-        );
-      } catch (err) {
-        setImportError("No se pudo leer el archivo. Verifica que sea un Excel o CSV válido.");
-      }
+    const res = leerPresupuesto(data);
+    if (res.error) {
+      setImportError(res.error);
+      return;
     }
+    const nuevas = res.partidas.map((p) => ({ ...p, id: newId() }));
+    const { sinMonto, totalArchivo, totalImportado } = res;
+    setAvisos({ sinMonto, totalArchivo });
+    setExcluirAjustes(false);
+    setSolape(0);
+    setMoneda(res.moneda);
+    setPartidas(nuevas);
+    setPlazoTotal(null);
+    setInicioManual({});
+    setDuracionManual({});
+    const totalCategorias = new Set(nuevas.map((p) => p.categoria).filter(Boolean)).size;
+    const ajustes = nuevas.filter((p) => p.esAjuste);
+    setImportInfo(
+      nuevas.length + " partidas importadas correctamente." +
+      (totalArchivo !== null ? " La suma coincide con el total indicado en el archivo." : "") +
+      (totalCategorias > 1 ? " Se detectaron " + totalCategorias + " capítulos propios del archivo y se usarán para agrupar el " + M.cronograma + "." : "") +
+      (res.notas.length ? " " + res.notas.join(" ") : "") +
+      (sinMonto ? " " + sinMonto + (sinMonto === 1 ? " partida del archivo no tiene monto y quedó fuera del análisis" : " partidas del archivo no tienen monto y quedaron fuera del análisis") + "; revisa si es una omisión del presupuesto." : "") +
+      (ajustes.length
+        ? " Atención: " + ajustes.length + (ajustes.length === 1 ? " línea parece un ajuste" : " líneas parecen ajustes") + " y no un trabajo de obra («" + ajustes.map((p) => truncar(p.name, 40)).join("», «") + "», " + d1((ajustes.reduce((s, p) => s + p.monto, 0) / totalImportado) * 100) + "% del total); se incluye en el análisis, revísala."
+        : "") +
+      (res.otrasHojas.length
+        ? " El archivo tiene otras hojas con datos (" + res.otrasHojas.join(", ") + "); se analizó solo la hoja «" + res.hoja + "»."
+        : (res.totalHojas > 1 && !res.hojaUsadaEsPrimera ? " Se analizó la hoja «" + res.hoja + "», que es la que contiene el presupuesto." : ""))
+    );
   };
 
   const handleFile = (e) => {
