@@ -71,14 +71,14 @@ export const LANDING = {
   vistaTitulo: "Mira qué obtendrás antes de subir tu archivo",
   vistaSubtitulo: "El análisis convierte un presupuesto extenso en una vista priorizada para tu revisión. Esta captura usa un presupuesto de ejemplo con datos ficticios.",
   vistaElementos: [
-    "Ranking de partidas por peso económico",
+    "Partidas ordenadas por peso económico",
     "Cost Drivers y clasificación A / B / C",
     "Línea que marca hasta dónde llega tu revisión",
     "Compresión de Revisión",
     "Peso individual y acumulado de cada partida",
     "Reporte exportable a Excel con gráficos",
   ],
-  vistaAlt: "Captura del análisis de un presupuesto de ejemplo: ranking de partidas y gráfico de Cost Drivers",
+  vistaAlt: "Captura del análisis de un presupuesto de ejemplo: partidas ordenadas y gráfico de Cost Drivers",
 
   complementariosEtiqueta: "Resultados complementarios",
   complementariosTitulo: "Más información a partir del mismo presupuesto",
@@ -167,7 +167,7 @@ export const LANDING = {
     },
     {
       p: "¿Qué incluye el reporte en Excel?",
-      r: "Una hoja de resumen con el reporte ejecutivo y un gráfico de las partidas de mayor peso, el ranking completo de Cost Drivers con la línea que marca hasta dónde llega tu revisión, el cronograma de obra con su diagrama de Gantt (editable: al cambiar una duración, las demás fases se desplazan), el flujo de caja semanal, mensual y anual con sus gráficos, la curva de avance financiero y las prioridades de procura. Los gráficos vienen dentro del archivo, listos para anexar a tu oferta.",
+      r: "Una hoja de resumen con el reporte ejecutivo y un gráfico de las partidas de mayor peso, la lista completa de Cost Drivers, ordenada por peso, con la línea que marca hasta dónde llega tu revisión, el cronograma de obra con su diagrama de Gantt (editable: al cambiar una duración, las demás fases se desplazan), el flujo de caja semanal, mensual y anual con sus gráficos, la curva de avance financiero y las prioridades de procura. Los gráficos vienen dentro del archivo, listos para anexar a tu oferta.",
     },
     {
       p: "¿Cómo se calcula el flujo de caja?",
