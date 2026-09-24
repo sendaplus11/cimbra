@@ -1,8 +1,9 @@
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { ComposedChart, BarChart, Bar, Cell, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer } from "recharts";
 import * as XLSX from "xlsx-js-style";
 import { MODULOS as M } from "./textos.js";
 import { ganttXML, barrasYLineaXML, lineaXML, agregarGraficos } from "./excelGraficos.js";
+import { FILAS_EJEMPLO } from "./ejemploPresupuesto.js";
 
 let idCounter = 1;
 const newId = () => idCounter++;
@@ -146,17 +147,14 @@ export default function AnalisisPareto() {
   const [excluirAjustes, setExcluirAjustes] = useState(false);
   // Avisos de lectura del archivo: partidas sin monto y total declarado en el propio archivo.
   const [avisos, setAvisos] = useState({ sinMonto: 0, totalArchivo: null });
+  const [esEjemplo, setEsEjemplo] = useState(false);
   const fmt = (n) => moneda + fmtNum(n);
 
-  const handleFile = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const analizarBytes = (data) => {
     setImportError("");
     setImportInfo("");
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      try {
-        const data = new Uint8Array(evt.target.result);
+    {
+        try {
         const wb = XLSX.read(data, { type: "array" });
         const sheet = wb.Sheets[wb.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true });
@@ -295,9 +293,48 @@ export default function AnalisisPareto() {
       } catch (err) {
         setImportError("No se pudo leer el archivo. Verifica que sea un Excel o CSV válido.");
       }
-    };
+    }
+  };
+
+  const handleFile = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setImportError("");
+    setImportInfo("");
+    setEsEjemplo(false);
+    const reader = new FileReader();
+    reader.onload = (evt) => analizarBytes(new Uint8Array(evt.target.result));
     reader.readAsArrayBuffer(file);
   };
+
+  // Presupuesto de ejemplo (sintético): se convierte en un Excel dentro del navegador y pasa por el mismo análisis.
+  const libroDeEjemplo = () => {
+    const ws = XLSX.utils.aoa_to_sheet(FILAS_EJEMPLO);
+    ws["!cols"] = [{ wch: 9 }, { wch: 58 }, { wch: 8 }, { wch: 10 }, { wch: 14 }, { wch: 14 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Presupuesto");
+    return wb;
+  };
+  const usarEjemplo = () => {
+    const bytes = XLSX.write(libroDeEjemplo(), { type: "array", bookType: "xlsx" });
+    analizarBytes(new Uint8Array(bytes));
+    setPlazoTotal(360); // el ejemplo trae un plazo de 12 meses para que el cronograma y el flujo de caja se vean completos
+    setEsEjemplo(true);
+  };
+  const descargarEjemplo = () => XLSX.writeFile(libroDeEjemplo(), "cimbra-presupuesto-de-ejemplo.xlsx");
+
+  // La página principal puede pedir cargar el ejemplo (botón "Ver ejemplo" del encabezado).
+  useEffect(() => {
+    const alPedirEjemplo = () => {
+      usarEjemplo();
+      setTimeout(() => {
+        const el = document.getElementById("herramienta");
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 50);
+    };
+    window.addEventListener("cimbra:ejemplo", alPedirEjemplo);
+    return () => window.removeEventListener("cimbra:ejemplo", alPedirEjemplo);
+  }, []);
 
 
   const lineasDeAjuste = partidas.filter((p) => p.esAjuste);
@@ -877,6 +914,20 @@ export default function AnalisisPareto() {
       <div className="mb-4 bg-gray-50 p-3 rounded border border-gray-200">
         <label className="text-xs text-gray-500 block mb-1">Importar presupuesto de construcción (Excel, .xls o .csv)</label>
         <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} className="text-xs" />
+        <p className="text-xs text-gray-500 mt-2">Tu archivo se procesa en tu navegador y no se envía a ningún servidor.</p>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs">
+          <button type="button" onClick={usarEjemplo} className="font-medium rounded border px-3 py-1 hover:bg-white" style={{ borderColor: "#C9922B", color: "#1C2B39" }}>
+            No tengo un archivo ahora — usar presupuesto de ejemplo
+          </button>
+          <button type="button" onClick={descargarEjemplo} className="underline text-gray-500 hover:text-gray-800">
+            Descargar el archivo de ejemplo (para ver el formato)
+          </button>
+        </div>
+        {esEjemplo && (
+          <p className="text-xs mt-2 rounded p-2" style={{ background: "#FFF7E6", color: "#7A5A12" }}>
+            Estás viendo un <strong>presupuesto de ejemplo con datos ficticios</strong> (edificio residencial de 4 niveles, plazo de 12 meses). No corresponde a ninguna obra ni empresa real. Sube tu propio archivo para analizar tu proyecto.
+          </p>
+        )}
         {importError && <p className="text-xs mt-1" style={{ color: "#b91c1c" }}>{importError}</p>}
         {importInfo && <p className="text-xs mt-1" style={{ color: "#166534" }}>{importInfo}</p>}
         {lineasDeAjuste.length > 0 && (
@@ -890,7 +941,7 @@ export default function AnalisisPareto() {
         )}
       </div>
 
-      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mt-2">Bloque de pre-oferta — para usar antes de presentar la propuesta</p>
+      <p className="text-xs font-semibold uppercase tracking-wide mt-2" style={{ color: "#C9922B" }}>Análisis principal — para usar antes de presentar la oferta</p>
 
       {MOSTRAR_COST_ANALYSIS && (
         <>
@@ -985,7 +1036,7 @@ export default function AnalisisPareto() {
             <ResponsiveContainer width="100%" height={280}>
               <ComposedChart data={partidasMostradas} margin={{ top: 10, right: 20, left: 0, bottom: 40 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="nombreCorto" angle={-35} textAnchor="end" interval={0} height={70} tick={{ fontSize: 10 }} />
+                <XAxis dataKey="nombreCorto" angle={-35} textAnchor="end" interval={0} height={70} tick={{ fontSize: 10 }} padding={{ left: 40, right: 6 }} />
                 <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
                 <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 11 }} />
                 <Tooltip content={<CostDriverTooltip fmt={fmt} />} />
@@ -1060,7 +1111,7 @@ export default function AnalisisPareto() {
             <p className="text-xs text-gray-500 mb-3">
               Estas {corteRevision} partidas concentran el {porClase.A.length ? porClase.A[porClase.A.length - 1].pctAcum.toFixed(0) : 0}% del valor del presupuesto.
               {analizadas.length > corteRevision
-                ? " Las " + (analizadas.length - corteRevision) + " restantes suman el " + (100 - (porClase.A[porClase.A.length - 1] ? porClase.A[porClase.A.length - 1].pctAcum : 0)).toFixed(0) + "% y no justifican el mismo nivel de análisis."
+                ? " Las " + (analizadas.length - corteRevision) + " restantes suman el " + (100 - (porClase.A[porClase.A.length - 1] ? porClase.A[porClase.A.length - 1].pctAcum : 0)).toFixed(0) + "% y pueden revisarse con menor prioridad."
                 : ""}
             </p>
           )}
@@ -1127,7 +1178,11 @@ export default function AnalisisPareto() {
         </div>
       )}
 
-      <h2 className="text-base font-semibold mt-8 mb-1">2. 🏗️ {M.cronograma}</h2>
+      <div className="mt-10 pt-4 border-t-2" style={{ borderColor: "#E5E7EB" }}>
+        <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#3A5A73" }}>Resultados complementarios</p>
+        <p className="text-xs text-gray-500 mt-1 mb-2">A partir del mismo presupuesto, estas herramientas dan una referencia inicial de tiempo, dinero y compras. Son aproximaciones tempranas para apoyar tu oferta; no sustituyen tu programación detallada.</p>
+      </div>
+      <h2 className="text-base font-semibold mt-4 mb-1">2. 🏗️ {M.cronograma}</h2>
       <p className="text-xs text-gray-400 mb-2">Útil como anexo de la oferta y también durante la ejecución</p>
       <div className="mb-6 border border-gray-200 rounded p-3">
         {analizadas.length === 0 && <p className="text-xs text-gray-400 italic">Sube un presupuesto para poder estimar un cronograma.</p>}
