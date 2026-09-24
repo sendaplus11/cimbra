@@ -191,7 +191,7 @@ const NO_ES_CAPITULO = /^(partidas?|descripci[oó]n|description|[ií]tem|item|to
 // Filas que traen totales, subtotales o impuestos en la columna de descripción: no son partidas.
 const FILA_DE_TOTAL = /^\s*(i\.?v\.?a\b|i\.?g\.?v\b|impuesto|sub-?total|total\b|grand total|tax\b|vat\b|sales tax)/i;
 // Líneas que suelen ser ajustes financieros y no trabajos de obra: se avisan, no se excluyen.
-const LINEA_DE_AJUSTE = /variaci[oó]n de precios|escalaci[oó]n|imprevistos|reajuste de precios|contingencias?\b|contingency|escalation|price adjustment/i;
+const LINEA_DE_AJUSTE = /variaci[oó]n de precios|escalaci[oó]n|imprevistos|reajuste de precios|contingencias?\b|contingency|escalation|price adjustment|incremento por modificaci|aumento de costos|ajuste por inflaci/i;
 
 function prefijoCodigo(codigo) {
   if (!codigo) return null;
@@ -302,7 +302,6 @@ export function leerHoja(hoja) {
   }
 
   const textoContexto = filas.slice(0, Math.max(headerRowIdx, 0) + 1).concat(filas.slice(-25)).flat().filter((c) => typeof c === "string").join(" ");
-  const moneda = /(^|[^a-zñ])bs\.?([^a-zñ]|$)|bol[ií]vares\b/i.test(textoContexto) ? "Bs. " : /US\$|\bUSD\b|\bd[oó]lares\b|\(\$\)|\$\s*\d/i.test(textoContexto) ? "$" : "";
 
   const letra = (i) => XLSX.utils.encode_col(i);
   const notas = [];
@@ -313,7 +312,7 @@ export function leerHoja(hoja) {
     if (det.otrasDeMonto.length) notas.push("El archivo tiene varias columnas de monto; se usó la columna " + letra(amountIdx) + " (" + String(filas[headerRowIdx][amountIdx]).trim() + "), la de mayor valor. Si no es la correcta, deja en el archivo solo la que quieres analizar.");
   }
 
-  return { partidas, sinMonto, totalArchivo, moneda, totalImportado, notas, capitulos: usarCapitulos ? capitulosDistintos.size : 0, filas: filas.length };
+  return { partidas, sinMonto, totalArchivo, textoContexto, totalImportado, notas, capitulos: usarCapitulos ? capitulosDistintos.size : 0, filas: filas.length };
 }
 
 // ---------------------------------------------------------------- lectura del archivo completo
@@ -365,5 +364,22 @@ export function leerPresupuesto(bytes) {
     const rg = XLSX.utils.decode_range(ref);
     return rg.e.r - rg.s.r >= 5;
   });
+  // La moneda se busca en TODO el libro: muchos presupuestos la declaran en una hoja de
+  // condiciones o carátula distinta de la que trae las partidas.
+  let textoLibro = "";
+  for (const nombre of libro.SheetNames) {
+    const hoja = libro.Sheets[nombre];
+    if (!hoja || !hoja["!ref"]) continue;
+    for (const k of Object.keys(hoja)) {
+      if (k[0] === "!") continue;
+      const c = hoja[k];
+      if (c && typeof c.v === "string") textoLibro += " " + c.v;
+      if (c && c.z && typeof c.z === "string") textoLibro += " " + c.z;
+    }
+  }
+  mejor.moneda = /(^|[^a-zñ])bs\.?s?([^a-zñ]|$)|bol[ií]vares\b/i.test(textoLibro) ? "Bs. "
+    : /US\$|\bUSD\b|\bd[oó]lares\b|\(\$\)|\$\s*\d/i.test(textoLibro) ? "$" : "";
+  delete mejor.textoContexto;
+
   return { ...mejor, hojaUsadaEsPrimera: libro.SheetNames[0] === mejor.hoja, otrasHojas: otras, totalHojas: libro.SheetNames.length };
 }

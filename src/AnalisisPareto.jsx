@@ -51,6 +51,19 @@ const fasePorClase = {
   C: "Bajo impacto individual: usa el precio de referencia disponible sin invertir más tiempo en esta partida.",
 };
 
+// Solape por defecto: en una obra real los capítulos (o las partidas) casi nunca se ejecutan
+// uno detrás de otro; el 30% refleja un encadenamiento habitual y el usuario puede cambiarlo.
+const SOLAPE_POR_DEFECTO = 30;
+const PERIODICIDAD_LABEL = { semanas: "semanal", meses: "mensual", "años": "anual" };
+
+// Plazo provisional cuando el usuario todavía no ha escrito el suyo: así el Cronograma, el
+// Flujo de Caja y las Prioridades de Procura existen desde que se carga el archivo, y el
+// reporte en Excel sale completo. No pretende ser el plazo real: es un punto de partida.
+function plazoProvisional(nFases, hayCapitulos) {
+  const dias = hayCapitulos ? nFases * 30 : 180;
+  return Math.min(1800, Math.max(90, Math.round(dias / 30) * 30));
+}
+
 const MOSTRAR_CRITICAL_ACTIVITIES = false;
 const MOSTRAR_COST_ANALYSIS = false;
 
@@ -64,23 +77,6 @@ function encabezado(s, maxFallback = 55) {
   const corte = str.indexOf(".");
   if (corte > 5 && corte < 120) return str.slice(0, corte);
   return truncar(str, maxFallback);
-}
-
-const PHASE_KEYWORDS = [
-  { phase: "Preliminares y movimiento de tierra", keywords: ["excavacion", "excavación", "movimiento de tierra", "demolicion", "demolición", "replanteo", "fundacion", "fundación", "cimentacion", "cimentación"] },
-  { phase: "Estructura y obra civil", keywords: ["concreto", "estructura", "acero", "columna", "viga", "losa", "mamposteria", "mampostería", "pared", "bloque", "vialidad", "pavimento", "asfalto", "tuberia acero", "tubería acero"] },
-  { phase: "Instalaciones eléctricas y mecánicas", keywords: ["electric", "eléctric", "cable", "tablero", "transformador", "subestacion", "subestación", "tuberia", "tubería", "sanitari", "mecanic", "mecánic", "instrumentacion", "instrumentación"] },
-  { phase: "Acabados y equipos", keywords: ["acabado", "pintura", "piso", "revestimiento", "carpinteria", "carpintería", "equipo", "ventana", "puerta"] },
-  { phase: "Pruebas, señalización y cierre", keywords: ["prueba", "señalizacion", "señalización", "documentacion", "documentación", "entrega", "puesta en servicio", "epp", "cerramiento"] },
-];
-const PHASE_ORDER = PHASE_KEYWORDS.map((p) => p.phase).concat(["Otras partidas"]);
-
-function classifyPhase(name) {
-  const n = String(name || "").toLowerCase();
-  for (const { phase, keywords } of PHASE_KEYWORDS) {
-    if (keywords.some((k) => n.includes(k))) return phase;
-  }
-  return "Otras partidas";
 }
 
 function CostDriverTooltip({ active, payload, fmt }) {
@@ -99,11 +95,10 @@ export default function AnalisisPareto() {
   const [partidas, setPartidas] = useState(initialPartidas);
   const [umbralA, setUmbralA] = useState(80);
   const [umbralB, setUmbralB] = useState(90);
-  const [plazoTotal, setPlazoTotal] = useState(null);
+  const [plazoUsuario, setPlazoTotal] = useState(null);
   const [unidadTiempo, setUnidadTiempo] = useState("meses");
   // Mientras el usuario no elija unidad, la plataforma la deduce del propio proyecto.
   const [unidadElegida, setUnidadElegida] = useState(false);
-  const [periodicidad, setPeriodicidad] = useState("mensual");
   const [inicioManual, setInicioManual] = useState({});
   const [duracionManual, setDuracionManual] = useState({});
   const [topN, setTopN] = useState("80");
@@ -111,14 +106,17 @@ export default function AnalisisPareto() {
   const [importInfo, setImportInfo] = useState("");
   // Moneda detectada en el archivo ("Bs. ", "$"). Si el archivo no la indica, no se muestra ningún símbolo.
   const [moneda, setMoneda] = useState("");
-  // Solape entre fases del cronograma, en % de la duración de la fase anterior. Lo decide el usuario.
-  const [solape, setSolape] = useState(0);
+  // Solape entre fases: % de la fase anterior que todavía queda por ejecutar cuando arranca la
+  // siguiente. En obra las fases casi siempre se solapan, por eso el valor por defecto no es cero.
+  const [solape, setSolape] = useState(SOLAPE_POR_DEFECTO);
   // Cuando el archivo trae líneas de ajuste (variación de precios, imprevistos), el usuario elige si entran al análisis.
   const [excluirAjustes, setExcluirAjustes] = useState(false);
   // Avisos de lectura del archivo: partidas sin monto y total declarado en el propio archivo.
   const [avisos, setAvisos] = useState({ sinMonto: 0, totalArchivo: null });
   const [esEjemplo, setEsEjemplo] = useState(false);
   const [nombreArchivo, setNombreArchivo] = useState("");
+  // Las prioridades de procura se muestran resumidas; el usuario puede desplegar la lista completa.
+  const [verTodaProcura, setVerTodaProcura] = useState(false);
   const fmt = (n) => moneda + fmtNum(n);
 
   const analizarBytes = (data) => {
@@ -133,7 +131,7 @@ export default function AnalisisPareto() {
     const { sinMonto, totalArchivo, totalImportado } = res;
     setAvisos({ sinMonto, totalArchivo });
     setExcluirAjustes(false);
-    setSolape(0);
+    setSolape(SOLAPE_POR_DEFECTO);
     setMoneda(res.moneda);
     setPartidas(nuevas);
     setPlazoTotal(null);
@@ -311,6 +309,11 @@ export default function AnalisisPareto() {
       }
     });
   }
+  // Plazo de trabajo: el que escribió el usuario o, mientras no escriba ninguno, uno provisional.
+  // Así el cronograma, el flujo de caja y la procura funcionan apenas se carga el presupuesto.
+  const plazoEsProvisional = plazoUsuario === null && analizadas.length > 0;
+  const plazoTotal = plazoUsuario !== null ? plazoUsuario : (analizadas.length ? plazoProvisional(fasesOrdenadas.length, usarCapitulosParaSchedule) : null);
+
   // Duración mínima por fase: una semana, salvo que haya tantas fases que ni siquiera quepan;
   // así se evitan fases de "0,3 semanas" que ningún profesional puede ejecutar.
   const nFases = fasesOrdenadas.length || 1;
@@ -364,10 +367,9 @@ export default function AnalisisPareto() {
     if (dias <= 1460 || promedio < 120) return "meses";
     return "años";
   };
-  const aniosDisponible = plazoTotal === null || plazoTotal >= 365;
+  // La unidad la elige el usuario sin restricciones: hay proyectos de semanas, de meses y de años.
   const unidadAuto = unidadSugerida(plazoTotal, fasesOrdenadas.length);
-  const unidadPedida = unidadElegida ? unidadTiempo : unidadAuto;
-  const unidadEfectiva = unidadPedida === "años" && !aniosDisponible ? "meses" : unidadPedida;
+  const unidadEfectiva = unidadElegida ? unidadTiempo : unidadAuto;
   const diasPorUnidad = DIAS_UNIDAD[unidadEfectiva];
   const unidadLabel = NOMBRE_UNIDAD[unidadEfectiva];
   const unidadAbrev = ABREV_UNIDAD[unidadEfectiva];
@@ -402,8 +404,10 @@ export default function AnalisisPareto() {
     return filas;
   }
 
-  const periodDays = periodicidad === "semanal" ? 7 : periodicidad === "mensual" ? 30 : 365;
-  const periodLabel = periodicidad === "semanal" ? "Semana" : periodicidad === "mensual" ? "Mes" : "Año";
+  // El flujo de caja usa SIEMPRE la misma unidad que el Cronograma de Obra: si el cronograma se
+  // lee en semanas, el flujo es semanal; si es en meses, mensual; si es en años, anual.
+  const periodDays = diasPorUnidad;
+  const periodLabel = UNIDAD_SINGULAR[unidadEfectiva].charAt(0).toUpperCase() + UNIDAD_SINGULAR[unidadEfectiva].slice(1);
   const flujoCaja = calcularFlujo(periodDays, periodLabel);
   const numPeriodos = flujoCaja.length;
 
@@ -516,7 +520,7 @@ export default function AnalisisPareto() {
     const rPct90 = fila("Partidas que concentran el 90% del valor", n90, analizadas.length ? n90 / analizadas.length : 0);
     fila("Umbral clase A / clase B", umbralA + "% / " + umbralB + "%");
     fila("Partidas clase A", porClase.A.length);
-    const rDatos2 = fila("Plazo total estimado", hayPlazo ? plazoTexto(plazoTotal) : "No definido");
+    const rDatos2 = fila("Plazo total estimado", hayPlazo ? plazoTexto(plazoTotal) + (plazoEsProvisional ? " (provisional)" : "") : "No definido");
     fila();
     const rTitEjec = fila(M.reporteEjecutivo);
     const rTextoEjec = fila(textoEjecutivo);
@@ -529,7 +533,8 @@ export default function AnalisisPareto() {
       "El cronograma es una aproximación por fases proporcional al peso económico; no es un cronograma de ruta crítica (CPM): no incluye dependencias entre actividades.",
     ];
     if (huboMinimo && hayPlazo) parrafos.push("Las fases de menor peso recibieron una duración mínima para que el cronograma sea ejecutable; el conjunto se ajusta al plazo indicado.");
-    if (solape > 0 && hayPlazo) parrafos.push("El cronograma se calculó con un solape de " + solape + "% entre fases consecutivas, indicado por el usuario.");
+    if (solape > 0 && hayPlazo) parrafos.push("El cronograma se calculó con las fases solapadas: cada una arranca cuando la anterior lleva " + (100 - solape) + "% de avance.");
+    if (plazoEsProvisional) parrafos.push("El plazo de " + plazoTexto(plazoTotal) + " es provisional: Cimbra no puede deducir la duración real de la obra. Escribe el plazo de tu proyecto en " + M.cronograma + " y vuelve a descargar el reporte para que el cronograma, el " + M.flujoCaja + " y las " + M.procura + " reflejen tus tiempos.");
     if (avisos.sinMonto) parrafos.push(avisos.sinMonto + (avisos.sinMonto === 1 ? " partida del archivo no tiene monto y quedó fuera del análisis." : " partidas del archivo no tienen monto y quedaron fuera del análisis.") + " Revisa si es una omisión del presupuesto.");
     if (excluirAjustes && lineasDeAjuste.length) parrafos.push("Se excluyeron " + lineasDeAjuste.length + " líneas de ajuste (variación de precios, imprevistos u similares) a pedido del usuario.");
     if (!hayPlazo) parrafos.push("Este reporte se descargó sin plazo total, por lo que no incluye Cronograma de Obra, Flujo de Caja ni Curva de Avance. Define el plazo en el módulo " + M.cronograma + " y vuelve a descargar para incluirlos.");
@@ -1077,12 +1082,12 @@ export default function AnalisisPareto() {
         <>
         <div className="flex items-center justify-end gap-4 mb-3 flex-wrap">
           <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-500" title="Porcentaje de cada fase que puede ejecutarse en paralelo con la siguiente.">Solape entre fases</label>
+            <label className="text-xs text-gray-500" title="Define en qué punto de una fase arranca la siguiente.">Encadenamiento</label>
             <select className="border border-gray-200 rounded px-1 py-0.5 text-xs" value={solape} onChange={(e) => setSolape(Number(e.target.value))}>
-              <option value={0}>Sin solape (en secuencia)</option>
-              <option value={15}>15% — solape leve</option>
-              <option value={30}>30% — solape moderado</option>
-              <option value={50}>50% — obra muy solapada</option>
+              <option value={0}>Cada fase empieza al terminar la anterior</option>
+              <option value={15}>Empieza con la anterior al 85% (solape leve)</option>
+              <option value={30}>Empieza con la anterior al 70% (solape moderado)</option>
+              <option value={50}>Empieza con la anterior al 50% (obra muy solapada)</option>
             </select>
           </div>
           <div className="flex items-center gap-2">
@@ -1091,7 +1096,7 @@ export default function AnalisisPareto() {
               onChange={(e) => { setUnidadTiempo(e.target.value); setUnidadElegida(true); }}>
               <option value="semanas">Semanas</option>
               <option value="meses">Meses</option>
-              <option value="años" disabled={!aniosDisponible}>Años{aniosDisponible ? "" : " (plazo menor a 1 año)"}</option>
+              <option value="años">Años</option>
             </select>
           </div>
           <div className="flex items-center gap-2">
@@ -1103,14 +1108,19 @@ export default function AnalisisPareto() {
               onChange={(e) => { const raw = e.target.value; setPlazoTotal(raw === "" ? null : aDias(Number(raw))); }} />
           </div>
         </div>
-        {plazoTotal === null && (
-          <p className="text-xs text-gray-400 italic">Escribe el plazo total del proyecto arriba para generar el cronograma.</p>
+        {plazoEsProvisional && (
+          <p className="text-xs mb-3 px-2 py-1.5 rounded" style={{ background: "#FBEFD9", color: "#8A5A0B" }}>
+            Plazo provisional de {plazoTexto(plazoTotal)}: Cimbra no puede deducir la duración real de tu obra.
+            Escribe arriba el plazo de tu proyecto y el cronograma, el {M.flujoCaja} y las {M.procura} se recalculan.
+          </p>
         )}
         {plazoTotal !== null && plazoTotal > 0 && (
         <>
         <p className="text-xs text-gray-500 mb-3">
           {huboMinimo ? "Las fases de menor peso reciben una duración mínima para que el cronograma sea ejecutable, y el conjunto se reajusta al plazo que indicaste. " : ""}
-          {solape > 0 ? "Cada fase arranca cuando la anterior lleva " + (100 - solape) + "% de avance, según el solape que elegiste. " : ""}
+          {solape > 0
+            ? "Las fases se solapan: cada una arranca cuando la anterior lleva " + (100 - solape) + "% de avance, que es lo habitual en obra. El solape acorta el calendario, no la duración de cada fase. Puedes cambiarlo arriba. "
+            : "Las fases van una detrás de otra, sin solape. En obra lo normal es que se solapen: cámbialo arriba si es tu caso. "}
           La duración de cada fase se estima en proporción al peso de sus partidas dentro del presupuesto total, no a partir de rendimientos reales de cuadrilla. Si ya tienes fechas y duraciones reales de tu propio cronograma (en Primavera, Project o Excel), edita el inicio y la duración de cada fase abajo (en {unidadLabel}); el {M.flujoCaja} y las {M.procura} usarán esos valores en lugar de los calculados automáticamente.
         </p>
         {cronograma.length > 0 && (
@@ -1193,14 +1203,9 @@ export default function AnalisisPareto() {
         ) : (
         <>
         <div className="flex items-center justify-end mb-3">
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-500">Periodicidad</label>
-            <select className="border border-gray-200 rounded px-1 py-0.5 text-xs" value={periodicidad} onChange={(e) => setPeriodicidad(e.target.value)}>
-              <option value="semanal">Semanal</option>
-              <option value="mensual">Mensual</option>
-              <option value="anual">Anual</option>
-            </select>
-          </div>
+          <span className="text-xs text-gray-500">
+            Periodicidad: <strong className="font-semibold">{PERIODICIDAD_LABEL[unidadEfectiva]}</strong> — la misma unidad del {M.cronograma}. Cámbiala allí y este flujo se recalcula.
+          </span>
         </div>
         <p className="text-xs text-gray-500 mb-3">
           Curva del presupuesto total del proyecto, no solo de las partidas clase A. El avance físico se representa igual al avance financiero (ponderado por presupuesto), práctica habitual sin metrados de campo independientes.
@@ -1224,17 +1229,50 @@ export default function AnalisisPareto() {
       <p className="text-xs text-gray-400 mb-2">Ejecución — para usar una vez adjudicado el proyecto</p>
       <div className="mb-6 border border-gray-200 rounded p-3">
         <p className="text-xs text-gray-500 mb-3">
-          Partidas de alto o medio impacto económico (clase A y B), ordenadas por cuándo se necesitan según el cronograma. Incluyen materiales, equipos y también servicios o subcontratos: Cimbra no distingue todavía qué se compra y qué se contrata, ni si el insumo es de entrega larga o inmediata. Úsalas como guía de orden y aplica tu propio criterio sobre cuáles requieren más antelación.
+          Las partidas de mayor peso económico (clase A y B), ordenadas por el momento en que las necesitas según el cronograma. Incluyen materiales, equipos, servicios y subcontratos.
         </p>
         {analizadas.length === 0 && <p className="text-xs text-gray-400 italic">Sube un presupuesto para ver las prioridades de procura.</p>}
-        {analizadas.length > 0 && !hayPlazo && <p className="text-xs text-gray-400 italic mb-2">Define el plazo total en {M.cronograma} (módulo 2) para ver la semana en que se necesita cada partida.</p>}
         {analizadas.length > 0 && prioridadesCompra.length === 0 && <p className="text-xs text-gray-400 italic">No se detectaron partidas de compra crítica con la información actual.</p>}
-        {prioridadesCompra.map((p, i) => (
-          <div key={p.id} className="flex flex-wrap items-center justify-between gap-x-3 text-xs mb-1.5 border-b border-gray-100 pb-1.5">
-            <span>{i + 1}. {p.codigo ? p.codigo + " — " : ""}{encabezado(p.name, 70)}</span>
-            <span className="text-gray-500">{hayPlazo ? "Necesaria desde " + desdeMomento(p.inicioFase) + " · " : ""}fase {p.fase} · clase {p.clase}</span>
-          </div>
-        ))}
+        {prioridadesCompra.length > 0 && (
+          <>
+            <div className="flex flex-wrap gap-4 mb-3 text-xs">
+              <span className="text-gray-600">A gestionar: <strong className="font-semibold">{prioridadesCompra.length} partidas</strong></span>
+              <span className="text-gray-600">Peso en el presupuesto: <strong className="font-semibold">{d1(prioridadesCompra.reduce((a, p) => a + p.pctInd, 0))}%</strong></span>
+              {hayPlazo && <span className="text-gray-600">La primera se necesita desde <strong className="font-semibold">{desdeMomento(prioridadesCompra[0].inicioFase)}</strong></span>}
+            </div>
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-gray-500 border-b border-gray-200">
+                  <th className="text-left font-medium py-1 w-8">#</th>
+                  <th className="text-left font-medium py-1">Partida</th>
+                  <th className="text-right font-medium py-1 whitespace-nowrap">Se necesita</th>
+                  <th className="text-right font-medium py-1 w-16">% ppto.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(verTodaProcura ? prioridadesCompra : prioridadesCompra.slice(0, 10)).map((p, i) => (
+                  <tr key={p.id} className="border-b border-gray-100">
+                    <td className="py-1 text-gray-400">{i + 1}</td>
+                    <td className="py-1 pr-2">
+                      {p.codigo ? <span className="text-gray-400">{p.codigo} </span> : null}{encabezado(p.name, 60)}
+                      <span className="ml-1 px-1 rounded" style={{ background: claseInfo[p.clase].bg, color: claseInfo[p.clase].color }}>{p.clase}</span>
+                    </td>
+                    <td className="py-1 text-right text-gray-500 whitespace-nowrap">{hayPlazo ? momentoDeDia(p.inicioFase) : "—"}</td>
+                    <td className="py-1 text-right text-gray-500">{d1(p.pctInd)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {prioridadesCompra.length > 10 && (
+              <button className="text-xs text-blue-600 hover:underline mt-2" onClick={() => setVerTodaProcura((v) => !v)}>
+                {verTodaProcura ? "Ver solo las 10 primeras" : "Ver las " + prioridadesCompra.length + " partidas"}
+              </button>
+            )}
+            <p className="text-xs text-gray-400 mt-3">
+              Cimbra no distingue todavía qué se compra y qué se contrata, ni si el insumo es de entrega larga o inmediata: usa esto como guía de orden y aplica tu criterio sobre cuáles requieren más antelación. La lista completa va en el reporte de Excel.
+            </p>
+          </>
+        )}
       </div>
 
       {MOSTRAR_CRITICAL_ACTIVITIES && (
