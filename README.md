@@ -1,4 +1,4 @@
-# Cimbra — sitio v1
+# OBRALYT — sitio v1
 
 Landing page de una sola página con la herramienta de análisis de presupuestos (Cost Drivers, Cronograma de Obra, Flujo de Caja, Prioridades de Procura y Reporte Ejecutivo; Análisis de Costos y Actividades Críticas están en pausa) embebida directamente. Todo el procesamiento ocurre en el navegador del usuario; el presupuesto que suba nunca se envía a ningún servidor.
 
@@ -11,7 +11,7 @@ npm install
 npm run dev
 ```
 
-## Build de producción (para Vercel/Netlify)
+## Build de producción (para Cloudflare Pages)
 
 ```
 npm run build
@@ -29,8 +29,8 @@ No hace falta configurar variables de entorno ni backend.
 - `src/App.jsx` — composición de la landing page (hero, secciones de posicionamiento, caso de referencia, la herramienta).
 - `src/AnalisisPareto.jsx` — el componente de la herramienta (Cost Drivers, cronograma, flujo de caja, etc.).
 - `src/textos.js` — glosario oficial de módulos, textos de la landing, preguntas frecuentes y número de WhatsApp. Todo en español excepto "Cost Drivers".
-- `src/assets/` — logos de Cimbra en SVG.
-- Colores de marca: azul oscuro `#1C2B39`, ámbar `#C9922B` (definidos en `tailwind.config.js` como `cimbra.dark` y `cimbra.amber`).
+- `src/assets/` — logos de OBRALYT en SVG.
+- Colores de marca: azul oscuro `#1C2B39`, ámbar `#C9922B` (definidos en `tailwind.config.js` como `obralyt.dark` y `obralyt.amber`).
 
 ## Nota sobre el botón "Descargar reporte completo (Excel)"
 

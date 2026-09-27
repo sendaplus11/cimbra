@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import logoHeader from "./assets/cimbra-web-header.svg";
+import logoHeader from "./assets/obralyt-web-header.svg";
 import { CORREO_CONTACTO } from "./textos.js";
 import { UMAMI_WEBSITE_ID } from "./medicion.js";
 
@@ -9,7 +9,7 @@ const TITULAR = "Carlos Magallanes";
 const DOMICILIO = "Miami, Florida, Estados Unidos";
 const LEY_APLICABLE = "el estado de Florida, Estados Unidos";
 const TRIBUNALES = "los tribunales estatales o federales con sede en el condado de Miami-Dade, Florida";
-const FECHA = "24 de septiembre de 2026";
+const FECHA = "26 de septiembre de 2026";
 // La sección de estadísticas describe solo las herramientas que están activas.
 const CON_UMAMI = Boolean(UMAMI_WEBSITE_ID);
 
@@ -17,21 +17,21 @@ const PRIVACIDAD = [
   {
     t: "1. Quién es responsable",
     p: [
-      "Cimbra (cimbrapro.com) es un servicio operado por " + TITULAR + ", con domicilio en " + DOMICILIO + " («Cimbra», «nosotros»). Para cualquier asunto relacionado con tus datos puedes escribir a " + CORREO_CONTACTO + ".",
+      "OBRALYT (obralyt.com) es un servicio operado por " + TITULAR + ", con domicilio en " + DOMICILIO + " («OBRALYT», «nosotros»). Para cualquier asunto relacionado con tus datos puedes escribir a " + CORREO_CONTACTO + ".",
     ],
   },
   {
     t: "2. Tu presupuesto no sale de tu computadora",
     p: [
-      "El análisis se ejecuta completamente en tu navegador. El archivo que cargas (Excel o CSV) no se sube ni se envía a servidores de Cimbra ni de terceros, y Cimbra no tiene acceso a su contenido ni lo almacena.",
-      "Al cerrar o recargar la página, los datos del análisis desaparecen de la memoria del navegador. Los reportes en Excel se generan en tu equipo y quedan donde tú los guardes. Cimbra no usa cookies ni almacenamiento local del navegador para guardar tu información.",
+      "El análisis se ejecuta completamente en tu navegador. El archivo que cargas (Excel o CSV) no se sube ni se envía a servidores de OBRALYT ni de terceros, y OBRALYT no tiene acceso a su contenido ni lo almacena.",
+      "Al cerrar o recargar la página, los datos del análisis desaparecen de la memoria del navegador. Los reportes en Excel se generan en tu equipo y quedan donde tú los guardes. OBRALYT no usa cookies ni almacenamiento local del navegador para guardar tu información.",
     ],
   },
   {
     t: "3. Qué datos sí se tratan",
     p: [
       "Datos técnicos de la visita: el sitio está alojado en Cloudflare, que, como cualquier proveedor de alojamiento, procesa datos técnicos necesarios para entregar la página y protegerla (por ejemplo, dirección IP, tipo de navegador y dispositivo, página solicitada, fecha y hora).",
-      "Estadísticas de uso agregadas: usamos Cloudflare Web Analytics para conocer cuántas visitas recibe el sitio y cómo se comporta técnicamente. Según Cloudflare, esta herramienta no usa cookies ni almacenamiento local y no crea perfiles individuales; Cimbra solo ve cifras agregadas (visitas, páginas, país, tipo de dispositivo)." +
+      "Estadísticas de uso agregadas: usamos Cloudflare Web Analytics para conocer cuántas visitas recibe el sitio y cómo se comporta técnicamente. Según Cloudflare, esta herramienta no usa cookies ni almacenamiento local y no crea perfiles individuales; OBRALYT solo ve cifras agregadas (visitas, páginas, país, tipo de dispositivo)." +
         (CON_UMAMI
           ? " También usamos Umami, una herramienta de medición sin cookies, para saber de dónde llegan las visitas (por ejemplo, un enlace de LinkedIn o una campaña), qué secciones se ven y en qué botones se hace clic (por ejemplo, «Ver ejemplo», «Descargar reporte» o abrir una pregunta frecuente). Esos registros nunca incluyen el contenido de tu presupuesto, el nombre del archivo, montos ni resultados del análisis."
           : ""),
@@ -68,19 +68,19 @@ const PRIVACIDAD = [
   {
     t: "8. Señales «Do Not Track»",
     p: [
-      "Cimbra no rastrea a los visitantes a lo largo del tiempo ni entre sitios de terceros, por lo que no cambia su funcionamiento según la señal «Do Not Track» del navegador.",
+      "OBRALYT no rastrea a los visitantes a lo largo del tiempo ni entre sitios de terceros, por lo que no cambia su funcionamiento según la señal «Do Not Track» del navegador.",
     ],
   },
   {
     t: "9. Menores de edad",
     p: [
-      "Cimbra es una herramienta profesional dirigida a personas mayores de 18 años y no está pensada para menores. No recogemos a sabiendas datos de menores; si crees que un menor nos envió datos, escríbenos y los eliminaremos.",
+      "OBRALYT es una herramienta profesional dirigida a personas mayores de 18 años y no está pensada para menores. No recogemos a sabiendas datos de menores; si crees que un menor nos envió datos, escríbenos y los eliminaremos.",
     ],
   },
   {
     t: "10. Seguridad",
     p: [
-      "El sitio se sirve solo por conexión cifrada (HTTPS). Ningún sistema es completamente infalible, pero el diseño de Cimbra reduce el riesgo desde el origen: tu presupuesto nunca viaja por internet.",
+      "El sitio se sirve solo por conexión cifrada (HTTPS). Ningún sistema es completamente infalible, pero el diseño de OBRALYT reduce el riesgo desde el origen: tu presupuesto nunca viaja por internet.",
     ],
   },
   {
@@ -95,25 +95,25 @@ const TERMINOS = [
   {
     t: "1. Aceptación",
     p: [
-      "Estos términos regulan el uso de cimbrapro.com y de la herramienta Cimbra, un servicio operado por " + TITULAR + ". Al usar el sitio aceptas estos términos. Si no estás de acuerdo, no uses la herramienta.",
+      "Estos términos regulan el uso de obralyt.com y de la herramienta OBRALYT, un servicio operado por " + TITULAR + ". Al usar el sitio aceptas estos términos. Si no estás de acuerdo, no uses la herramienta.",
     ],
   },
   {
-    t: "2. Qué es Cimbra",
+    t: "2. Qué es OBRALYT",
     p: [
-      "Cimbra es una herramienta de análisis que muestra en qué partidas de un presupuesto de construcción se concentra el valor económico y genera referencias iniciales de cronograma por fases, flujo de caja, prioridades de procura y un reporte ejecutivo. Actualmente se ofrece en fase de prueba y sin costo. Podemos introducir planes de pago en el futuro; en ese caso lo anunciaremos con anticipación y nunca se te cobrará sin tu aceptación expresa.",
+      "OBRALYT es una herramienta de análisis que muestra en qué partidas de un presupuesto de construcción se concentra el valor económico y genera referencias iniciales de cronograma por fases, flujo de caja, prioridades de procura y un reporte ejecutivo. Actualmente se ofrece en fase de prueba y sin costo. Podemos introducir planes de pago en el futuro; en ese caso lo anunciaremos con anticipación y nunca se te cobrará sin tu aceptación expresa.",
     ],
   },
   {
     t: "3. Quién puede usarla",
     p: [
-      "Debes ser mayor de 18 años y usar Cimbra con fines profesionales o comerciales. Si la usas en nombre de una empresa, declaras que tienes autorización para aceptar estos términos en su nombre.",
+      "Debes ser mayor de 18 años y usar OBRALYT con fines profesionales o comerciales. Si la usas en nombre de una empresa, declaras que tienes autorización para aceptar estos términos en su nombre.",
     ],
   },
   {
     t: "4. Tus archivos",
     p: [
-      "Tu presupuesto sigue siendo tuyo. El archivo se procesa en tu navegador y Cimbra no lo recibe ni lo almacena. Eres responsable de tener derecho a analizar los archivos que cargas, incluida cualquier obligación de confidencialidad con tu cliente o empleador. Los reportes que descargues puedes usarlos libremente en tu trabajo.",
+      "Tu presupuesto sigue siendo tuyo. El archivo se procesa en tu navegador y OBRALYT no lo recibe ni lo almacena. Eres responsable de tener derecho a analizar los archivos que cargas, incluida cualquier obligación de confidencialidad con tu cliente o empleador. Los reportes que descargues puedes usarlos libremente en tu trabajo.",
     ],
   },
   {
@@ -125,13 +125,13 @@ const TERMINOS = [
   {
     t: "6. Propiedad intelectual",
     p: [
-      "El software, el diseño, los textos, los logotipos y la marca Cimbra pertenecen a " + TITULAR + ". Microsoft Excel, Microsoft Project, Oracle Primavera y otros nombres de productos mencionados son marcas de sus respectivos titulares; se citan solo para describir compatibilidad o diferencias, sin que exista relación ni respaldo de esas empresas.",
+      "El software, el diseño, los textos, los logotipos y la marca OBRALYT pertenecen a " + TITULAR + ". Microsoft Excel, Microsoft Project, Oracle Primavera y otros nombres de productos mencionados son marcas de sus respectivos titulares; se citan solo para describir compatibilidad o diferencias, sin que exista relación ni respaldo de esas empresas.",
     ],
   },
   {
     t: "7. Los resultados son referencias, no asesoría profesional",
     p: [
-      "Los resultados son cálculos automáticos que dependen de los datos de tu archivo. Cimbra no afirma que un precio esté bien o mal cotizado, no promete ahorros y no sustituye el criterio de un profesional de la ingeniería, la construcción o las finanzas. El cronograma y el flujo de caja son estimaciones tempranas por fases, no una programación con dependencias ni ruta crítica. El presupuesto de ejemplo contiene datos ficticios.",
+      "Los resultados son cálculos automáticos que dependen de los datos de tu archivo. OBRALYT no afirma que un precio esté bien o mal cotizado, no promete ahorros y no sustituye el criterio de un profesional de la ingeniería, la construcción o las finanzas. El cronograma y el flujo de caja son estimaciones tempranas por fases, no una programación con dependencias ni ruta crítica. El presupuesto de ejemplo contiene datos ficticios.",
       "Antes de tomar decisiones de oferta, compra, contratación o financiamiento, verifica los resultados con tu propio análisis. Tú eres el único responsable de las decisiones que tomes.",
     ],
   },
@@ -144,7 +144,7 @@ const TERMINOS = [
   {
     t: "9. Limitación de responsabilidad",
     p: [
-      "EN LA MEDIDA MÁXIMA QUE PERMITA LA LEY, " + TITULAR.toUpperCase() + " NO SERÁ RESPONSABLE DE DAÑOS INDIRECTOS, INCIDENTALES, ESPECIALES O CONSECUENTES, NI DE PÉRDIDA DE CONTRATOS, LICITACIONES, GANANCIAS O DATOS, DERIVADOS DEL USO DE CIMBRA O DE SUS RESULTADOS. LA RESPONSABILIDAD TOTAL POR CUALQUIER RECLAMO NO EXCEDERÁ LA MAYOR DE ESTAS CANTIDADES: LO QUE HAYAS PAGADO POR EL SERVICIO EN LOS 12 MESES ANTERIORES O CIEN DÓLARES ESTADOUNIDENSES (US$100).",
+      "EN LA MEDIDA MÁXIMA QUE PERMITA LA LEY, " + TITULAR.toUpperCase() + " NO SERÁ RESPONSABLE DE DAÑOS INDIRECTOS, INCIDENTALES, ESPECIALES O CONSECUENTES, NI DE PÉRDIDA DE CONTRATOS, LICITACIONES, GANANCIAS O DATOS, DERIVADOS DEL USO DE OBRALYT O DE SUS RESULTADOS. LA RESPONSABILIDAD TOTAL POR CUALQUIER RECLAMO NO EXCEDERÁ LA MAYOR DE ESTAS CANTIDADES: LO QUE HAYAS PAGADO POR EL SERVICIO EN LOS 12 MESES ANTERIORES O CIEN DÓLARES ESTADOUNIDENSES (US$100).",
       "Algunas jurisdicciones no permiten ciertas exclusiones; en ese caso se aplicarán en la medida permitida.",
     ],
   },
@@ -169,7 +169,7 @@ const TERMINOS = [
   {
     t: "13. Disposiciones generales",
     p: [
-      "Si alguna cláusula se considera inválida, las demás siguen vigentes. Que no exijamos el cumplimiento de una cláusula no significa que renunciemos a ella. Estos términos, junto con la Política de privacidad, forman el acuerdo completo sobre el uso de Cimbra. Si en el futuro se publica una versión en otro idioma, prevalecerá la versión en español.",
+      "Si alguna cláusula se considera inválida, las demás siguen vigentes. Que no exijamos el cumplimiento de una cláusula no significa que renunciemos a ella. Estos términos, junto con la Política de privacidad, forman el acuerdo completo sobre el uso de OBRALYT. Si en el futuro se publica una versión en otro idioma, prevalecerá la versión en español.",
       "Contacto: " + CORREO_CONTACTO + ".",
     ],
   },
@@ -182,11 +182,11 @@ export default function Legal({ tipo }) {
   const secciones = esPrivacidad ? PRIVACIDAD : TERMINOS;
   const volver = (e) => { e.preventDefault(); window.location.hash = ""; window.scrollTo(0, 0); };
   return (
-    <div className="min-h-screen bg-white text-cimbra-dark font-sans">
+    <div className="min-h-screen bg-white text-obralyt-dark font-sans">
       <header className="border-b border-gray-100">
         <div className="max-w-3xl mx-auto px-4 py-2 flex items-center justify-between">
-          <a href="#" onClick={volver}><img src={logoHeader} alt="Cimbra" className="h-9 w-auto" /></a>
-          <a href="#" onClick={volver} className="text-sm text-gray-600 hover:text-cimbra-dark">← Volver al inicio</a>
+          <a href="#" onClick={volver}><img src={logoHeader} alt="OBRALYT" className="h-9 w-auto" /></a>
+          <a href="#" onClick={volver} className="text-sm text-gray-600 hover:text-obralyt-dark">← Volver al inicio</a>
         </div>
       </header>
       <main className="max-w-3xl mx-auto px-4 py-10">
@@ -198,9 +198,9 @@ export default function Legal({ tipo }) {
             {s.p.map((x, i) => (<p key={i} className="text-sm text-gray-700 leading-relaxed mb-2">{x}</p>))}
           </section>
         ))}
-        <p className="text-sm text-gray-600 mt-8">¿Preguntas? Escríbenos a <a className="text-cimbra-amber font-medium hover:underline" href={"mailto:" + CORREO_CONTACTO}>{CORREO_CONTACTO}</a>.</p>
+        <p className="text-sm text-gray-600 mt-8">¿Preguntas? Escríbenos a <a className="text-obralyt-amber font-medium hover:underline" href={"mailto:" + CORREO_CONTACTO}>{CORREO_CONTACTO}</a>.</p>
         <p className="text-sm mt-4">
-          <a className="text-gray-500 hover:text-cimbra-dark underline" href={esPrivacidad ? "#/terminos" : "#/privacidad"}>
+          <a className="text-gray-500 hover:text-obralyt-dark underline" href={esPrivacidad ? "#/terminos" : "#/privacidad"}>
             {esPrivacidad ? "Ver los términos de uso" : "Ver la política de privacidad"}
           </a>
         </p>

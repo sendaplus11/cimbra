@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://www.cimbrapro.com/sitemap.xml
+Sitemap: https://obralyt.com/sitemap.xml

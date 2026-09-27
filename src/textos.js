@@ -1,4 +1,4 @@
-// Textos de la plataforma Cimbra.
+// Textos de la plataforma OBRALYT.
 // Todo el contenido visible de la landing y los nombres oficiales de los módulos
 // viven aquí, separados del código de los componentes. Cuando llegue la versión
 // en inglés, basta con crear un objeto equivalente (por ejemplo `en`) con las
@@ -20,11 +20,11 @@ export const MODULOS = {
 // Número de WhatsApp para el botón de contacto, en formato internacional sin "+",
 // espacios ni guiones (ejemplo: "584141234567"). Mientras esté vacío, el botón no se muestra.
 export const WHATSAPP_NUMERO = "";
-export const WHATSAPP_MENSAJE = "Hola, tengo una pregunta sobre Cimbra.";
+export const WHATSAPP_MENSAJE = "Hola, tengo una pregunta sobre OBRALYT.";
 
 // Correo de contacto. Mientras esté vacío, no se muestra el recuadro de contacto
 // en preguntas frecuentes ni el correo en el pie de página.
-export const CORREO_CONTACTO = "contacto@cimbrapro.com";
+export const CORREO_CONTACTO = "contacto@obralyt.com";
 
 // Perfil profesional del fundador (se muestra en "Quién está detrás"). Mientras esté vacío, no se muestra el enlace.
 export const LINKEDIN_URL = "https://www.linkedin.com/in/carlos-magallanes-construction";
@@ -32,7 +32,7 @@ export const LINKEDIN_URL = "https://www.linkedin.com/in/carlos-magallanes-const
 export const LANDING = {
   cta: "Probar gratis",
   etiqueta: "Inteligencia de costos",
-  mensaje10s: "Tu software calcula el presupuesto. Cimbra te ayuda a saber dónde mirar.",
+  mensaje10s: "Tu software calcula el presupuesto. OBRALYT te ayuda a saber dónde mirar.",
   apoyo:
     "Sube tu presupuesto en Excel y descubre en segundos qué partidas concentran el mayor valor económico de la obra, para enfocar tu revisión antes de presentar la oferta.",
   ctaPrincipal: "Probar con mi presupuesto",
@@ -40,10 +40,10 @@ export const LANDING = {
   lineaConfianza: "Excel o CSV · Análisis en tu navegador · Tu presupuesto no se sube a ningún servidor",
 
   pasosTitulo: "De cientos de partidas a una revisión enfocada",
-  pasosSubtitulo: "Cimbra trabaja sobre el presupuesto que ya tienes. No tienes que reconstruirlo ni cambiar de software.",
+  pasosSubtitulo: "OBRALYT trabaja sobre el presupuesto que ya tienes. No tienes que reconstruirlo ni cambiar de software.",
   pasos: [
     { n: "01", titulo: "Sube tu presupuesto", texto: "Importa un archivo Excel o CSV generado desde tu sistema habitual." },
-    { n: "02", titulo: "Identifica dónde está el valor", texto: "Cimbra ordena las partidas por peso económico e identifica los Cost Drivers del proyecto." },
+    { n: "02", titulo: "Identifica dónde está el valor", texto: "OBRALYT ordena las partidas por peso económico e identifica los Cost Drivers del proyecto." },
     { n: "03", titulo: "Enfoca tu revisión", texto: "Concentra tu atención en las partidas que reúnen la mayor parte del valor antes de comprometerte con la oferta." },
   ],
 
@@ -60,8 +60,8 @@ export const LANDING = {
     "La partida de mayor peso individual, casi el 10% del presupuesto completo, no era la más evidente a simple vista.",
   casoCta: "Comprobarlo con mi presupuesto",
 
-  nucleoTitulo: "El núcleo de Cimbra",
-  nucleoSubtitulo: "Cimbra no revisa por ti: reduce el universo de partidas que merece tu atención.",
+  nucleoTitulo: "El núcleo de OBRALYT",
+  nucleoSubtitulo: "OBRALYT no revisa por ti: reduce el universo de partidas que merece tu atención.",
   nucleo: [
     { titulo: "Cost Drivers", texto: "Identifica y ordena las partidas que concentran el mayor peso económico del presupuesto." },
     { titulo: "Clasificación A / B / C", texto: "Agrupa las partidas según su aporte acumulado al valor total para facilitar la priorización." },
@@ -83,7 +83,7 @@ export const LANDING = {
   complementariosEtiqueta: "Resultados complementarios",
   complementariosTitulo: "Más información a partir del mismo presupuesto",
   complementariosSubtitulo:
-    "Una vez identificado dónde está el valor, Cimbra genera referencias iniciales para apoyar la preparación de la oferta. Son aproximaciones tempranas, no reemplazan tu programación detallada.",
+    "Una vez identificado dónde está el valor, OBRALYT genera referencias iniciales para apoyar la preparación de la oferta. Son aproximaciones tempranas, no reemplazan tu programación detallada.",
   complementarios: [
     { titulo: "Cronograma de Obra", texto: "Una secuencia inicial por fases con su diagrama de Gantt, editable. No sustituye Primavera ni MS Project." },
     { titulo: "Flujo de Caja", texto: "La distribución del dinero en el tiempo, por semana, mes o año, con su curva de avance." },
@@ -95,7 +95,7 @@ export const LANDING = {
   herramientaTexto:
     "Sube tu presupuesto (Excel o CSV). El archivo nunca se sube a ningún servidor: todo el análisis ocurre en tu navegador. ¿No tienes un archivo a mano? Usa el presupuesto de ejemplo.",
 
-  quienesSomosTitulo: "Cimbra trabaja sobre lo que ya existe",
+  quienesSomosTitulo: "OBRALYT trabaja sobre lo que ya existe",
   problema:
     "En un presupuesto de cientos de partidas no todas pesan igual, pero el tiempo de revisión del profesional sí es limitado.",
   bloques: [
@@ -136,26 +136,26 @@ export const LANDING = {
 
   fundadorTitulo: "Diseñado desde la experiencia real en construcción",
   fundadorTexto:
-    "Cimbra nace de más de dos décadas de experiencia en gerencia, ejecución y estimación de proyectos de construcción. Surge de un problema cotidiano: presupuestos extensos, tiempo limitado de revisión y la necesidad de saber rápido dónde está concentrado el valor económico.",
+    "OBRALYT nace de más de dos décadas de experiencia en gerencia, ejecución y estimación de proyectos de construcción. Surge de un problema cotidiano: presupuestos extensos, tiempo limitado de revisión y la necesidad de saber rápido dónde está concentrado el valor económico.",
   fundadorEnlace: "Ver perfil profesional en LinkedIn",
 
   faqTitulo: "Preguntas frecuentes",
   faq: [
     {
-      p: "¿Cimbra reemplaza mi software de presupuesto?",
-      r: "No. Cimbra trabaja sobre el presupuesto que ya elaboraste, sin importar el programa. Cimbra te dice dónde mirar; tu software de estimación te permite decidir cómo cambiarlo.",
+      p: "¿OBRALYT reemplaza mi software de presupuesto?",
+      r: "No. OBRALYT trabaja sobre el presupuesto que ya elaboraste, sin importar el programa. OBRALYT te dice dónde mirar; tu software de estimación te permite decidir cómo cambiarlo.",
     },
     {
       p: "¿Qué formato debe tener mi archivo?",
-      r: "Excel (.xlsx o .xls) o CSV, en español o en inglés. Cimbra busca automáticamente la columna con la descripción de la partida (descripción, partida, concepto, actividad o description) y la del monto (total, monto, importe o amount). Si el archivo trae cantidad y precio unitario pero no total, calcula el monto multiplicándolos. También reconoce la columna de código o ítem, los montos escritos como 1.234,56 o 1,234.56, los CSV con punto y coma, y busca el presupuesto en la hoja correcta si el libro tiene varias. Si no encuentra encabezados, deduce las columnas por su contenido y te avisa cuáles usó. Puedes descargar el archivo de ejemplo para ver el formato. Por ahora no se aceptan archivos PDF.",
+      r: "Excel (.xlsx o .xls) o CSV, en español o en inglés. OBRALYT busca automáticamente la columna con la descripción de la partida (descripción, partida, concepto, actividad o description) y la del monto (total, monto, importe o amount). Si el archivo trae cantidad y precio unitario pero no total, calcula el monto multiplicándolos. También reconoce la columna de código o ítem, los montos escritos como 1.234,56 o 1,234.56, los CSV con punto y coma, y busca el presupuesto en la hoja correcta si el libro tiene varias. Si no encuentra encabezados, deduce las columnas por su contenido y te avisa cuáles usó. Puedes descargar el archivo de ejemplo para ver el formato. Por ahora no se aceptan archivos PDF.",
     },
     {
       p: "¿Mi presupuesto se envía a algún servidor?",
       r: "No. El archivo se procesa completamente en tu navegador y nunca sale de tu computadora.",
     },
     {
-      p: "¿Cimbra me dice cuánto voy a ahorrar?",
-      r: "No. Cimbra no promete ahorros ni afirma que una partida esté mal cotizada. Te muestra qué partidas concentran el valor económico para que tu revisión empiece donde más impacto tiene. La decisión sobre precios y alcance siempre es tuya.",
+      p: "¿OBRALYT me dice cuánto voy a ahorrar?",
+      r: "No. OBRALYT no promete ahorros ni afirma que una partida esté mal cotizada. Te muestra qué partidas concentran el valor económico para que tu revisión empiece donde más impacto tiene. La decisión sobre precios y alcance siempre es tuya.",
     },
     {
       p: "¿Qué es la Compresión de Revisión?",
@@ -183,6 +183,6 @@ export const LANDING = {
   correoTexto: "Escríbenos a",
 
   ctaFinalTitulo: "Tu presupuesto ya está hecho. Ahora decide dónde mirar.",
-  ctaFinalTexto: "Analízalo con Cimbra y descubre qué partidas concentran el valor económico del proyecto.",
+  ctaFinalTexto: "Analízalo con OBRALYT y descubre qué partidas concentran el valor económico del proyecto.",
   ctaFinalBoton: "Analizar mi presupuesto",
 };

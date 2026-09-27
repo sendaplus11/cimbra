@@ -187,7 +187,7 @@ export default function AnalisisPareto() {
   };
   const descargarEjemplo = () => {
     registrarEvento("formato_ejemplo_descargado");
-    XLSX.writeFile(libroDeEjemplo(), "cimbra-presupuesto-de-ejemplo.xlsx");
+    XLSX.writeFile(libroDeEjemplo(), "obralyt-presupuesto-de-ejemplo.xlsx");
   };
 
   // La página principal puede pedir cargar el ejemplo (botón "Ver ejemplo" del encabezado).
@@ -199,8 +199,8 @@ export default function AnalisisPareto() {
         if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 50);
     };
-    window.addEventListener("cimbra:ejemplo", alPedirEjemplo);
-    return () => window.removeEventListener("cimbra:ejemplo", alPedirEjemplo);
+    window.addEventListener("obralyt:ejemplo", alPedirEjemplo);
+    return () => window.removeEventListener("obralyt:ejemplo", alPedirEjemplo);
   }, []);
 
 
@@ -510,7 +510,7 @@ export default function AnalisisPareto() {
     // --- Hoja 1: Resumen (con el gráfico de las partidas de mayor peso) ---
     const filasResumen = [];
     const fila = (...celdas) => { filasResumen.push(celdas); return filasResumen.length - 1; };
-    const rTitulo = fila("Cimbra — Inteligencia de costos");
+    const rTitulo = fila("OBRALYT — Inteligencia de costos");
     const rSubtitulo = fila("Reporte de análisis de presupuesto · " + fecha);
     fila();
     const rDatos1 = fila("Total analizado (suma de las partidas, sin IVA)", total);
@@ -527,14 +527,14 @@ export default function AnalisisPareto() {
     fila();
     const rTitLeer = fila("Cómo leer este reporte");
     const parrafos = [
-      "Cimbra te dice DÓNDE mirar: las partidas de clase A concentran el mayor valor económico y merecen tu revisión primero. Tu software de estimación te permite decidir CÓMO cambiarlo. El criterio final sobre precios, alcance y compras es siempre del profesional.",
+      "OBRALYT te dice DÓNDE mirar: las partidas de clase A concentran el mayor valor económico y merecen tu revisión primero. Tu software de estimación te permite decidir CÓMO cambiarlo. El criterio final sobre precios, alcance y compras es siempre del profesional.",
       "El total analizado es la suma de las partidas importadas: no incluye IVA ni otros montos que el archivo sume aparte." +
         (avisos.totalArchivo !== null ? " Coincide con el total indicado en el archivo de origen." : ""),
       "El cronograma es una aproximación por fases proporcional al peso económico; no es un cronograma de ruta crítica (CPM): no incluye dependencias entre actividades.",
     ];
     if (huboMinimo && hayPlazo) parrafos.push("Las fases de menor peso recibieron una duración mínima para que el cronograma sea ejecutable; el conjunto se ajusta al plazo indicado.");
     if (solape > 0 && hayPlazo) parrafos.push("El cronograma se calculó con las fases solapadas: cada una arranca cuando la anterior lleva " + (100 - solape) + "% de avance.");
-    if (plazoEsProvisional) parrafos.push("El plazo de " + plazoTexto(plazoTotal) + " es provisional: Cimbra no puede deducir la duración real de la obra. Escribe el plazo de tu proyecto en " + M.cronograma + " y vuelve a descargar el reporte para que el cronograma, el " + M.flujoCaja + " y las " + M.procura + " reflejen tus tiempos.");
+    if (plazoEsProvisional) parrafos.push("El plazo de " + plazoTexto(plazoTotal) + " es provisional: OBRALYT no puede deducir la duración real de la obra. Escribe el plazo de tu proyecto en " + M.cronograma + " y vuelve a descargar el reporte para que el cronograma, el " + M.flujoCaja + " y las " + M.procura + " reflejen tus tiempos.");
     if (avisos.sinMonto) parrafos.push(avisos.sinMonto + (avisos.sinMonto === 1 ? " partida del archivo no tiene monto y quedó fuera del análisis." : " partidas del archivo no tienen monto y quedaron fuera del análisis.") + " Revisa si es una omisión del presupuesto.");
     if (excluirAjustes && lineasDeAjuste.length) parrafos.push("Se excluyeron " + lineasDeAjuste.length + " líneas de ajuste (variación de precios, imprevistos u similares) a pedido del usuario.");
     if (!hayPlazo) parrafos.push("Este reporte se descargó sin plazo total, por lo que no incluye Cronograma de Obra, Flujo de Caja ni Curva de Avance. Define el plazo en el módulo " + M.cronograma + " y vuelve a descargar para incluirlos.");
@@ -642,7 +642,7 @@ export default function AnalisisPareto() {
     if (hayPlazo) {
       // El cronograma se exporta VIVO: la columna de inicio y la de fin son fórmulas, de modo que
       // al cambiar la duración de una fase en Excel, las siguientes se desplazan y el diagrama de
-      // Gantt se redibuja solo, sin tener que volver a Cimbra.
+      // Gantt se redibuja solo, sin tener que volver a OBRALYT.
       const filasCrono = cronograma.map((f) => [
         f.name, aUnidadEd(f.inicio), aUnidadEd(f.dias), aUnidadEd(f.fin), f.monto, f.pct, listaPartidas(f.partidas),
       ]);
@@ -759,7 +759,7 @@ export default function AnalisisPareto() {
       );
     }
 
-    const nombreArchivo = "cimbra-reporte-" + new Date().toISOString().slice(0, 10) + ".xlsx";
+    const nombreArchivo = "obralyt-reporte-" + new Date().toISOString().slice(0, 10) + ".xlsx";
     try {
       const bytes = XLSX.write(wb, { type: "array", bookType: "xlsx" });
       const conGraficos = agregarGraficos(bytes, graficos, hojasCongeladas);
@@ -992,7 +992,7 @@ export default function AnalisisPareto() {
           </div>
           {p.rank === corteRevision && (
             <div className="my-2 flex items-center gap-3">
-              <span className="h-px flex-1 bg-cimbra-amber" style={{ background: "#C9922B" }}></span>
+              <span className="h-px flex-1 bg-obralyt-amber" style={{ background: "#C9922B" }}></span>
               <span className="text-xs font-semibold uppercase tracking-wide whitespace-nowrap" style={{ color: "#C9922B" }}>
                 Hasta aquí llega tu revisión
               </span>
@@ -1110,7 +1110,7 @@ export default function AnalisisPareto() {
         </div>
         {plazoEsProvisional && (
           <p className="text-xs mb-3 px-2 py-1.5 rounded" style={{ background: "#FBEFD9", color: "#8A5A0B" }}>
-            Plazo provisional de {plazoTexto(plazoTotal)}: Cimbra no puede deducir la duración real de tu obra.
+            Plazo provisional de {plazoTexto(plazoTotal)}: OBRALYT no puede deducir la duración real de tu obra.
             Escribe arriba el plazo de tu proyecto y el cronograma, el {M.flujoCaja} y las {M.procura} se recalculan.
           </p>
         )}
@@ -1269,7 +1269,7 @@ export default function AnalisisPareto() {
               </button>
             )}
             <p className="text-xs text-gray-400 mt-3">
-              Cimbra no distingue todavía qué se compra y qué se contrata, ni si el insumo es de entrega larga o inmediata: usa esto como guía de orden y aplica tu criterio sobre cuáles requieren más antelación. La lista completa va en el reporte de Excel.
+              OBRALYT no distingue todavía qué se compra y qué se contrata, ni si el insumo es de entrega larga o inmediata: usa esto como guía de orden y aplica tu criterio sobre cuáles requieren más antelación. La lista completa va en el reporte de Excel.
             </p>
           </>
         )}

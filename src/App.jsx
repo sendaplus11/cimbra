@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import AnalisisPareto from "./AnalisisPareto.jsx";
 import Legal from "./Legal.jsx";
 import { iniciarMedicion, registrarEvento, observarSecciones } from "./medicion.js";
-import logoHero from "./assets/cimbra-web-hero.svg";
-import logoHeader from "./assets/cimbra-web-header.svg";
+import logoHero from "./assets/obralyt-web-hero.svg";
+import logoHeader from "./assets/obralyt-web-header.svg";
 import vistaEjemplo from "./assets/ejemplo-resultado.jpg";
 import { LANDING as T, WHATSAPP_NUMERO, WHATSAPP_MENSAJE, CORREO_CONTACTO, LINKEDIN_URL } from "./textos.js";
 
@@ -20,7 +20,7 @@ function Texto({ children }) {
     .split(TERMINOS_CLAVE)
     .map((parte, i) =>
       i % 2 === 1 ? (
-        <strong key={i} className="font-semibold text-cimbra-dark whitespace-nowrap">
+        <strong key={i} className="font-semibold text-obralyt-dark whitespace-nowrap">
           {parte.replace(/ /g, " ")}
         </strong>
       ) : (
@@ -30,9 +30,9 @@ function Texto({ children }) {
 }
 
 const btnCta =
-  "inline-block bg-cimbra-amber text-white font-medium rounded-lg hover:opacity-90 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cimbra-dark";
+  "inline-block bg-obralyt-amber text-white font-medium rounded-lg hover:opacity-90 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-obralyt-dark";
 const btnSecundario =
-  "inline-block border border-cimbra-dark text-cimbra-dark font-medium rounded-lg hover:bg-cimbra-dark hover:text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cimbra-dark";
+  "inline-block border border-obralyt-dark text-obralyt-dark font-medium rounded-lg hover:bg-obralyt-dark hover:text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-obralyt-dark";
 
 function usarHash() {
   const [hash, setHash] = useState(typeof window === "undefined" ? "" : window.location.hash);
@@ -48,7 +48,7 @@ function usarHash() {
 function verEjemplo(e, ubicacion) {
   e.preventDefault();
   registrarEvento("clic_ver_ejemplo", { ubicacion });
-  window.dispatchEvent(new Event("cimbra:ejemplo"));
+  window.dispatchEvent(new Event("obralyt:ejemplo"));
 }
 
 // Clic en un botón que lleva a la herramienta (se registra desde qué parte de la página).
@@ -71,15 +71,15 @@ export default function App() {
   if (hash === "#/terminos") return <Legal tipo="terminos" />;
 
   return (
-    <div className="min-h-screen bg-white text-cimbra-dark font-sans">
+    <div className="min-h-screen bg-white text-obralyt-dark font-sans">
       {/* Barra superior */}
       <header className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-gray-100">
         <div className="max-w-5xl mx-auto px-4 py-2 flex items-center justify-between">
-          <img src={logoHeader} alt="Cimbra" className="h-9 w-auto" />
+          <img src={logoHeader} alt="OBRALYT" className="h-9 w-auto" />
           <nav className="flex items-center gap-4 text-sm">
-            <a href="#que-es" className="hidden sm:inline text-gray-600 hover:text-cimbra-dark">Qué es</a>
-            <a href="#caso-real" className="hidden sm:inline text-gray-600 hover:text-cimbra-dark">Caso real</a>
-            <a href="#preguntas" className="hidden sm:inline text-gray-600 hover:text-cimbra-dark">Preguntas</a>
+            <a href="#que-es" className="hidden sm:inline text-gray-600 hover:text-obralyt-dark">Qué es</a>
+            <a href="#caso-real" className="hidden sm:inline text-gray-600 hover:text-obralyt-dark">Caso real</a>
+            <a href="#preguntas" className="hidden sm:inline text-gray-600 hover:text-obralyt-dark">Preguntas</a>
             <a href="#herramienta" onClick={clicProbar("barra_superior")} className={btnCta + " text-sm px-4 py-1.5 rounded"}>{T.cta}</a>
           </nav>
         </div>
@@ -88,13 +88,13 @@ export default function App() {
       {/* Encabezado: logo, "inteligencia de costos" legible, mensaje de 10 segundos, apoyo y botones */}
       <section className="bg-[#F7F5F1] blueprint-grid border-b border-gray-200">
         <div className="max-w-5xl mx-auto px-4 py-5 md:py-7 flex flex-col items-center text-center">
-          <img src={logoHero} alt="Cimbra" className="h-24 md:h-28 w-auto" />
-          <p className="mt-1 flex items-center gap-3 text-cimbra-dark font-semibold uppercase tracking-[0.16em] sm:tracking-[0.22em] text-xs sm:text-sm md:text-base">
-            <span aria-hidden="true" className="hidden sm:block h-px w-10 md:w-14 bg-cimbra-amber"></span>
+          <img src={logoHero} alt="OBRALYT" className="h-24 md:h-28 w-auto" />
+          <p className="mt-1 flex items-center gap-3 text-obralyt-dark font-semibold uppercase tracking-[0.16em] sm:tracking-[0.22em] text-xs sm:text-sm md:text-base">
+            <span aria-hidden="true" className="hidden sm:block h-px w-10 md:w-14 bg-obralyt-amber"></span>
             {T.etiqueta}
-            <span aria-hidden="true" className="hidden sm:block h-px w-10 md:w-14 bg-cimbra-amber"></span>
+            <span aria-hidden="true" className="hidden sm:block h-px w-10 md:w-14 bg-obralyt-amber"></span>
           </p>
-          <h1 className="mt-4 text-lg md:text-2xl font-semibold leading-snug max-w-2xl text-balance text-cimbra-dark">
+          <h1 className="mt-4 text-lg md:text-2xl font-semibold leading-snug max-w-2xl text-balance text-obralyt-dark">
             {T.mensaje10s}
           </h1>
           <p className="mt-2 text-sm md:text-base text-gray-600 max-w-xl leading-relaxed text-balance">{T.apoyo}</p>
@@ -113,7 +113,7 @@ export default function App() {
         <div className="grid md:grid-cols-3 gap-4">
           {T.pasos.map((p) => (
             <div key={p.n} className="border border-gray-200 rounded-xl p-4 bg-white">
-              <p className="text-2xl font-semibold text-cimbra-amber leading-none mb-2">{p.n}</p>
+              <p className="text-2xl font-semibold text-obralyt-amber leading-none mb-2">{p.n}</p>
               <h3 className="text-base font-semibold mb-1">{p.titulo}</h3>
               <p className="text-sm text-gray-700 leading-relaxed"><Texto>{p.texto}</Texto></p>
             </div>
@@ -124,12 +124,12 @@ export default function App() {
       {/* Caso de referencia: primera prueba concreta */}
       <section id="caso-real" className="max-w-5xl mx-auto px-4 py-8 scroll-mt-14">
         <div className="bg-gray-50 border border-gray-100 rounded-xl p-5 md:p-6">
-          <p className="text-xs font-semibold uppercase tracking-wide text-cimbra-amber mb-1">{T.casoEtiqueta}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-obralyt-amber mb-1">{T.casoEtiqueta}</p>
           <h2 className="text-lg md:text-xl font-semibold mb-4 text-balance">{T.casoTitulo}</h2>
           <div className="grid grid-cols-3 gap-3 mb-4">
             {T.casoCifras.map((c) => (
               <div key={c.etiqueta} className="bg-white border border-gray-200 rounded-lg py-2 px-2 text-center">
-                <p className="text-xl md:text-2xl font-semibold text-cimbra-amber leading-tight">{c.valor}</p>
+                <p className="text-xl md:text-2xl font-semibold text-obralyt-amber leading-tight">{c.valor}</p>
                 <p className="text-xs text-gray-500">{c.etiqueta}</p>
               </div>
             ))}
@@ -146,7 +146,7 @@ export default function App() {
         <p className="text-gray-500 text-sm text-center mb-6">{T.nucleoSubtitulo}</p>
         <div className="grid md:grid-cols-3 gap-4">
           {T.nucleo.map((f) => (
-            <div key={f.titulo} className="border-l-4 border-cimbra-amber bg-white border border-gray-200 rounded-r-xl p-4">
+            <div key={f.titulo} className="border-l-4 border-obralyt-amber bg-white border border-gray-200 rounded-r-xl p-4">
               <h3 className="text-base font-semibold mb-1 whitespace-nowrap">{f.titulo.replace(/ /g, " ")}</h3>
               <p className="text-sm text-gray-700 leading-relaxed">{f.texto}</p>
             </div>
@@ -162,7 +162,7 @@ export default function App() {
           <div className="grid md:grid-cols-7 gap-6 items-start">
             <ul className="md:col-span-2 space-y-2 text-sm text-gray-700 md:pt-4">
               {T.vistaElementos.map((x) => (
-                <li key={x} className="flex gap-2"><span className="text-cimbra-amber font-semibold">✓</span><span><Texto>{x}</Texto></span></li>
+                <li key={x} className="flex gap-2"><span className="text-obralyt-amber font-semibold">✓</span><span><Texto>{x}</Texto></span></li>
               ))}
             </ul>
             <div className="md:col-span-5">
@@ -190,7 +190,7 @@ export default function App() {
 
       {/* Resultados complementarios */}
       <section id="complementarios" className="max-w-5xl mx-auto px-4 py-10">
-        <p className="text-xs font-semibold uppercase tracking-wide text-cimbra-amber text-center mb-1">{T.complementariosEtiqueta}</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-obralyt-amber text-center mb-1">{T.complementariosEtiqueta}</p>
         <h2 className="text-xl font-semibold mb-1 text-center">{T.complementariosTitulo}</h2>
         <p className="text-gray-500 text-sm text-center mb-6 max-w-2xl mx-auto">{T.complementariosSubtitulo}</p>
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -203,7 +203,7 @@ export default function App() {
         </div>
       </section>
 
-      {/* Qué es Cimbra: información escaneable */}
+      {/* Qué es OBRALYT: información escaneable */}
       <section id="que-es" className="max-w-5xl mx-auto px-4 py-10 scroll-mt-14">
         <h2 className="text-xl font-semibold mb-2 text-center">{T.quienesSomosTitulo}</h2>
         <p className="text-gray-600 text-sm text-center mb-6 max-w-2xl mx-auto">{T.problema}</p>
@@ -213,7 +213,7 @@ export default function App() {
               <h3 className="text-base font-semibold mb-2">{b.titulo}</h3>
               <ul className="space-y-1.5 text-sm text-gray-700 leading-relaxed">
                 {b.puntos.map((x) => (
-                  <li key={x} className="flex gap-2"><span aria-hidden="true" className="text-cimbra-amber">•</span><span><Texto>{x}</Texto></span></li>
+                  <li key={x} className="flex gap-2"><span aria-hidden="true" className="text-obralyt-amber">•</span><span><Texto>{x}</Texto></span></li>
                 ))}
               </ul>
             </div>
@@ -227,7 +227,7 @@ export default function App() {
         <p className="text-sm text-gray-700 leading-relaxed">{T.fundadorTexto}</p>
         {LINKEDIN_URL && (
           <p className="mt-3">
-            <a href={LINKEDIN_URL} target="_blank" rel="noopener noreferrer" onClick={() => registrarEvento("clic_linkedin")} className="text-cimbra-amber font-medium text-sm hover:underline">
+            <a href={LINKEDIN_URL} target="_blank" rel="noopener noreferrer" onClick={() => registrarEvento("clic_linkedin")} className="text-obralyt-amber font-medium text-sm hover:underline">
               {T.fundadorEnlace} →
             </a>
           </p>
@@ -242,7 +242,7 @@ export default function App() {
             <details key={f.p} className="group py-3" onToggle={(e) => { if (e.currentTarget.open) registrarEvento("pregunta_abierta", { pregunta: f.p }); }}>
               <summary className="cursor-pointer list-none flex items-center justify-between gap-4 font-medium text-sm">
                 {f.p}
-                <span className="text-cimbra-amber text-lg leading-none transition group-open:rotate-45">+</span>
+                <span className="text-obralyt-amber text-lg leading-none transition group-open:rotate-45">+</span>
               </summary>
               <p className="mt-2 text-sm text-gray-700 leading-relaxed"><Texto>{f.r}</Texto></p>
             </details>
@@ -251,7 +251,7 @@ export default function App() {
         {whatsappUrl && (
           <div className="text-center mt-6">
             <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" onClick={() => registrarEvento("clic_whatsapp")}
-              className="inline-block border border-cimbra-dark text-cimbra-dark text-sm font-medium px-5 py-2 rounded-lg hover:bg-cimbra-dark hover:text-white transition">
+              className="inline-block border border-obralyt-dark text-obralyt-dark text-sm font-medium px-5 py-2 rounded-lg hover:bg-obralyt-dark hover:text-white transition">
               {T.whatsappTexto}
             </a>
           </div>
@@ -260,7 +260,7 @@ export default function App() {
           <div className="text-center mt-4">
             <p className="text-sm text-gray-500">
               {T.correoTitulo}{" "}
-              <a href={"mailto:" + CORREO_CONTACTO} onClick={() => registrarEvento("clic_correo", { ubicacion: "preguntas" })} className="text-cimbra-amber font-medium hover:underline">
+              <a href={"mailto:" + CORREO_CONTACTO} onClick={() => registrarEvento("clic_correo", { ubicacion: "preguntas" })} className="text-obralyt-amber font-medium hover:underline">
                 {T.correoTexto} {CORREO_CONTACTO}
               </a>
             </p>
@@ -280,17 +280,17 @@ export default function App() {
       {/* Pie de página */}
       <footer className="py-8 text-center text-sm text-gray-400 border-t border-gray-100">
         <p>
-          <a href="#/privacidad" className="hover:text-cimbra-dark">Privacidad</a>
+          <a href="#/privacidad" className="hover:text-obralyt-dark">Privacidad</a>
           {" "}·{" "}
-          <a href="#/terminos" className="hover:text-cimbra-dark">Términos de uso</a>
+          <a href="#/terminos" className="hover:text-obralyt-dark">Términos de uso</a>
           {CORREO_CONTACTO && (
             <>
               {" "}·{" "}
-              <a href={"mailto:" + CORREO_CONTACTO} onClick={() => registrarEvento("clic_correo", { ubicacion: "pie" })} className="hover:text-cimbra-dark">{CORREO_CONTACTO}</a>
+              <a href={"mailto:" + CORREO_CONTACTO} onClick={() => registrarEvento("clic_correo", { ubicacion: "pie" })} className="hover:text-obralyt-dark">{CORREO_CONTACTO}</a>
             </>
           )}
         </p>
-        <p className="mt-1">Cimbra · {YEAR}</p>
+        <p className="mt-1">OBRALYT · {YEAR}</p>
       </footer>
     </div>
   );

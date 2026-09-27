@@ -10,11 +10,11 @@
 //
 // Herramienta: Umami Cloud (sin cookies, plan gratuito para sitios pequeños). Mientras
 // UMAMI_WEBSITE_ID esté vacío, no se carga nada y registrarEvento() no hace nada.
-// Para activarlo: crea la cuenta en https://cloud.umami.is, agrega el sitio www.cimbrapro.com
+// Para activarlo: crea la cuenta en https://cloud.umami.is, agrega el sitio obralyt.com
 // y pega aquí el "Website ID" que te da Umami.
 export const UMAMI_WEBSITE_ID = "";
 
-const DOMINIOS = "www.cimbrapro.com,cimbrapro.com"; // no mide las pruebas locales
+const DOMINIOS = "www.obralyt.com,obralyt.com"; // no mide las pruebas locales
 let cola = [];
 let cargado = false;
 

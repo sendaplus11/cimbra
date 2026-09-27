@@ -4,7 +4,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        cimbra: {
+        obralyt: {
           dark: "#1C2B39",
           amber: "#C9922B",
         },
