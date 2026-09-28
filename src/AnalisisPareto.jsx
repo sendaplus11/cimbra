@@ -6,6 +6,7 @@ import { ganttXML, barrasYLineaXML, lineaXML, agregarGraficos } from "./excelGra
 import { FILAS_EJEMPLO } from "./ejemploPresupuesto.js";
 import { registrarEvento } from "./medicion.js";
 import { leerPresupuesto } from "./lectorPresupuesto.js";
+import FormularioContacto, { contactoYaRegistrado } from "./FormularioContacto.jsx";
 
 let idCounter = 1;
 const newId = () => idCounter++;
@@ -91,6 +92,76 @@ function CostDriverTooltip({ active, payload, fmt }) {
   );
 }
 
+// Secciones de resultados: la barra de navegación fija permite saltar entre ellas sin perderse.
+const SECCIONES_RESULTADO = [
+  { id: "res-cost-drivers", corto: "Cost Drivers", n: 1 },
+  { id: "res-cronograma", corto: "Cronograma", n: 2 },
+  { id: "res-flujo", corto: "Flujo de caja", n: 3 },
+  { id: "res-procura", corto: "Procura", n: 4 },
+  { id: "res-ejecutivo", corto: "Reporte ejecutivo", n: 5 },
+];
+
+function irA(id) {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function NavResultados({ onDescargar, puedeDescargar }) {
+  const [activa, setActiva] = useState(SECCIONES_RESULTADO[0].id);
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") return undefined;
+    const obs = new IntersectionObserver(
+      (entradas) => {
+        const visibles = entradas.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visibles.length) setActiva(visibles[0].target.id);
+      },
+      { rootMargin: "-120px 0px -55% 0px", threshold: 0 }
+    );
+    SECCIONES_RESULTADO.forEach((s) => { const el = document.getElementById(s.id); if (el) obs.observe(el); });
+    return () => obs.disconnect();
+  }, []);
+  return (
+    <nav aria-label="Secciones del análisis" className="sticky z-[9] -mx-4 px-4 py-2 mb-4 bg-white/95 backdrop-blur border-y border-gray-200" style={{ top: 52 }}>
+      <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap" style={{ scrollbarWidth: "none" }}>
+        <span className="text-[11px] uppercase tracking-wide text-gray-400 mr-1 hidden md:inline">Ir a</span>
+        {SECCIONES_RESULTADO.map((sec) => (
+          <button key={sec.id} type="button"
+            onClick={() => { irA(sec.id); registrarEvento("nav_resultados", { seccion: sec.id }); }}
+            aria-current={activa === sec.id ? "true" : undefined}
+            className={"text-xs rounded-full px-3 py-1 border transition " + (activa === sec.id ? "text-white border-transparent" : "text-gray-700 border-gray-300 hover:border-gray-500")}
+            style={activa === sec.id ? { background: "#1C2B39" } : undefined}>
+            <span className="opacity-60 mr-1">{sec.n}.</span>{sec.corto}
+          </button>
+        ))}
+        <button type="button" onClick={onDescargar} disabled={!puedeDescargar}
+          className="ml-auto text-xs font-medium text-white rounded-full px-3 py-1 hover:opacity-90 disabled:opacity-40"
+          style={{ background: "#C9922B" }}>
+          ⬇ Descargar Excel
+        </button>
+      </div>
+    </nav>
+  );
+}
+
+// Botón flotante para volver al inicio del análisis (aparece al bajar).
+function VolverArriba() {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const alDesplazar = () => setVisible(window.scrollY > 900);
+    window.addEventListener("scroll", alDesplazar, { passive: true });
+    alDesplazar();
+    return () => window.removeEventListener("scroll", alDesplazar);
+  }, []);
+  if (!visible) return null;
+  return (
+    <button type="button" onClick={() => irA("herramienta")} aria-label="Volver al inicio del análisis"
+      className="fixed bottom-5 right-5 z-20 rounded-full shadow-lg text-white text-xs font-medium px-4 py-2 hover:opacity-90"
+      style={{ background: "#1C2B39" }}>
+      ↑ Inicio del análisis
+    </button>
+  );
+}
+
 export default function AnalisisPareto() {
   const [partidas, setPartidas] = useState(initialPartidas);
   const [umbralA, setUmbralA] = useState(80);
@@ -117,9 +188,20 @@ export default function AnalisisPareto() {
   const [nombreArchivo, setNombreArchivo] = useState("");
   // Las prioridades de procura se muestran resumidas; el usuario puede desplegar la lista completa.
   const [verTodaProcura, setVerTodaProcura] = useState(false);
+  // Plazo que el cliente conoce ANTES de subir el archivo (opcional): tiene prioridad sobre
+  // cualquier otra fuente, porque nadie conoce su obra mejor que él.
+  const [plazoPrevio, setPlazoPrevio] = useState("");
+  const [unidadPrevia, setUnidadPrevia] = useState("meses");
+  // De dónde salió el plazo con el que se calcula el cronograma: "previo" (lo escribió antes de
+  // subir), "archivo" (el presupuesto lo declara o trae partidas medidas en tiempo), "usuario"
+  // (lo cambió en el cronograma) o null (provisional).
+  const [fuentePlazo, setFuentePlazo] = useState(null);
+  const [hojaAnalizada, setHojaAnalizada] = useState("");
+  const [pidiendoContacto, setPidiendoContacto] = useState(null);
   const fmt = (n) => moneda + fmtNum(n);
+  const DIAS_POR = { semanas: 7, meses: 30, "años": 365 };
 
-  const analizarBytes = (data) => {
+  const analizarBytes = (data, { ignorarPrevio = false } = {}) => {
     setImportError("");
     setImportInfo("");
     const res = leerPresupuesto(data);
@@ -134,9 +216,29 @@ export default function AnalisisPareto() {
     setSolape(SOLAPE_POR_DEFECTO);
     setMoneda(res.moneda);
     setPartidas(nuevas);
-    setPlazoTotal(null);
     setInicioManual({});
     setDuracionManual({});
+    setHojaAnalizada(res.hoja || "");
+    // Plazo: 1) el que escribió el cliente antes de subir; 2) el que trae el propio archivo;
+    // 3) ninguno: queda provisional y se le pide que lo escriba.
+    const previo = Number(String(plazoPrevio).replace(",", "."));
+    let textoPlazo = "";
+    if (!ignorarPrevio && previo > 0) {
+      setPlazoTotal(Math.round(previo * DIAS_POR[unidadPrevia]));
+      setFuentePlazo({ tipo: "previo" });
+      if (unidadPrevia !== "años") { setUnidadTiempo(unidadPrevia); setUnidadElegida(true); } else { setUnidadElegida(false); }
+      textoPlazo = " El cronograma usa el plazo que indicaste: " + String(plazoPrevio).replace(".", ",") + " " + unidadPrevia + ".";
+    } else if (res.plazoDetectado) {
+      setPlazoTotal(res.plazoDetectado.dias);
+      setFuentePlazo({ tipo: "archivo", ...res.plazoDetectado });
+      setUnidadElegida(false);
+      textoPlazo = " Plazo de obra tomado del archivo (" + res.plazoDetectado.detalle + ")" + (res.plazoDetectado.confianza === "alta" ? "." : "; confírmalo en el " + M.cronograma + ".");
+    } else {
+      setPlazoTotal(null);
+      setFuentePlazo(null);
+      setUnidadElegida(false);
+      textoPlazo = " El archivo no indica el plazo de la obra: escríbelo en el " + M.cronograma + " para que el cronograma y el flujo de caja reflejen tu proyecto.";
+    }
     const totalCategorias = new Set(nuevas.map((p) => p.categoria).filter(Boolean)).size;
     const ajustes = nuevas.filter((p) => p.esAjuste);
     setImportInfo(
@@ -150,7 +252,8 @@ export default function AnalisisPareto() {
         : "") +
       (res.otrasHojas.length
         ? " El archivo tiene otras hojas con datos (" + res.otrasHojas.join(", ") + "); se analizó solo la hoja «" + res.hoja + "»."
-        : (res.totalHojas > 1 && !res.hojaUsadaEsPrimera ? " Se analizó la hoja «" + res.hoja + "», que es la que contiene el presupuesto." : ""))
+        : (res.totalHojas > 1 && !res.hojaUsadaEsPrimera ? " Se analizó la hoja «" + res.hoja + "», que es la que contiene el presupuesto." : "")) +
+      textoPlazo
     );
   };
 
@@ -162,7 +265,7 @@ export default function AnalisisPareto() {
     setEsEjemplo(false);
     setNombreArchivo(file.name);
     // Medición: solo se registra que se cargó un archivo, nunca su nombre ni su contenido.
-    registrarEvento("presupuesto_cargado");
+    registrarEvento("presupuesto_cargado", { plazo_previo: plazoPrevio ? "si" : "no" });
     e.target.value = ""; // permite volver a elegir el mismo archivo
     const reader = new FileReader();
     reader.onload = (evt) => analizarBytes(new Uint8Array(evt.target.result));
@@ -181,8 +284,8 @@ export default function AnalisisPareto() {
     setNombreArchivo("presupuesto-de-ejemplo.xlsx");
     registrarEvento("ejemplo_cargado");
     const bytes = XLSX.write(libroDeEjemplo(), { type: "array", bookType: "xlsx" });
-    analizarBytes(new Uint8Array(bytes));
-    setPlazoTotal(360); // el ejemplo trae un plazo de 12 meses para que el cronograma y el flujo de caja se vean completos
+    // El ejemplo trae su propio plazo (vigilancia de obra, 12 meses): se lee igual que un archivo real.
+    analizarBytes(new Uint8Array(bytes), { ignorarPrevio: true });
     setEsEjemplo(true);
   };
   const descargarEjemplo = () => {
@@ -499,6 +602,13 @@ export default function AnalisisPareto() {
 
   const colLetra = (i) => XLSX.utils.encode_col(i);
 
+  // El reporte completo se entrega a cambio del contacto (una sola vez por navegador).
+  const pedirReporte = (origen) => {
+    registrarEvento("clic_descargar_excel", { ubicacion: origen });
+    if (contactoYaRegistrado()) handleExport();
+    else setPidiendoContacto(origen);
+  };
+
   const handleExport = () => {
     registrarEvento(esEjemplo ? "reporte_excel_descargado_ejemplo" : "reporte_excel_descargado");
     const fecha = new Date().toLocaleDateString("es", { year: "numeric", month: "long", day: "numeric" });
@@ -513,14 +623,20 @@ export default function AnalisisPareto() {
     const rTitulo = fila("OBRALYT — Inteligencia de costos");
     const rSubtitulo = fila("Reporte de análisis de presupuesto · " + fecha);
     fila();
-    const rDatos1 = fila("Total analizado (suma de las partidas, sin IVA)", total);
+    const origenPlazo = !fuentePlazo ? " (provisional)"
+      : fuentePlazo.tipo === "archivo" ? " (tomado del archivo: " + fuentePlazo.detalle + ")"
+      : " (indicado por el usuario)";
+    const rDatos1 = fila("Archivo analizado", (nombreArchivo || "—") + (hojaAnalizada ? " · hoja «" + hojaAnalizada + "»" : ""));
+    fila("Fecha del análisis", fecha);
+    fila("Partidas leídas del archivo", avisos.sinMonto ? partidas.length + " (+" + avisos.sinMonto + " sin monto, fuera del análisis)" : partidas.length);
+    const rTotal = fila("Total analizado (suma de las partidas, sin IVA)", total);
     fila("Partidas con valor", analizadas.length);
     fila(M.compresionRevision, Number(reviewCompression.toFixed(2)));
     const rPct80 = fila("Partidas que concentran el 80% del valor", n80, analizadas.length ? n80 / analizadas.length : 0);
     const rPct90 = fila("Partidas que concentran el 90% del valor", n90, analizadas.length ? n90 / analizadas.length : 0);
     fila("Umbral clase A / clase B", umbralA + "% / " + umbralB + "%");
     fila("Partidas clase A", porClase.A.length);
-    const rDatos2 = fila("Plazo total estimado", hayPlazo ? plazoTexto(plazoTotal) + (plazoEsProvisional ? " (provisional)" : "") : "No definido");
+    const rDatos2 = fila("Plazo total estimado", hayPlazo ? plazoTexto(plazoTotal) + origenPlazo : "No definido");
     fila();
     const rTitEjec = fila(M.reporteEjecutivo);
     const rTextoEjec = fila(textoEjecutivo);
@@ -534,7 +650,8 @@ export default function AnalisisPareto() {
     ];
     if (huboMinimo && hayPlazo) parrafos.push("Las fases de menor peso recibieron una duración mínima para que el cronograma sea ejecutable; el conjunto se ajusta al plazo indicado.");
     if (solape > 0 && hayPlazo) parrafos.push("El cronograma se calculó con las fases solapadas: cada una arranca cuando la anterior lleva " + (100 - solape) + "% de avance.");
-    if (plazoEsProvisional) parrafos.push("El plazo de " + plazoTexto(plazoTotal) + " es provisional: OBRALYT no puede deducir la duración real de la obra. Escribe el plazo de tu proyecto en " + M.cronograma + " y vuelve a descargar el reporte para que el cronograma, el " + M.flujoCaja + " y las " + M.procura + " reflejen tus tiempos.");
+    if (fuentePlazo && fuentePlazo.tipo === "archivo") parrafos.push("El plazo de " + plazoTexto(plazoTotal) + " se tomó del propio archivo (" + fuentePlazo.detalle + ")." + (fuentePlazo.confianza === "alta" ? "" : " Proviene de una partida medida en tiempo: confirma que coincide con la duración real de la obra."));
+    if (plazoEsProvisional) parrafos.push("El plazo de " + plazoTexto(plazoTotal) + " es provisional: el archivo no indica la duración de la obra. Escribe el plazo de tu proyecto en " + M.cronograma + " y vuelve a descargar el reporte para que el cronograma, el " + M.flujoCaja + " y las " + M.procura + " reflejen tus tiempos.");
     if (avisos.sinMonto) parrafos.push(avisos.sinMonto + (avisos.sinMonto === 1 ? " partida del archivo no tiene monto y quedó fuera del análisis." : " partidas del archivo no tienen monto y quedaron fuera del análisis.") + " Revisa si es una omisión del presupuesto.");
     if (excluirAjustes && lineasDeAjuste.length) parrafos.push("Se excluyeron " + lineasDeAjuste.length + " líneas de ajuste (variación de precios, imprevistos u similares) a pedido del usuario.");
     if (!hayPlazo) parrafos.push("Este reporte se descargó sin plazo total, por lo que no incluye Cronograma de Obra, Flujo de Caja ni Curva de Avance. Define el plazo en el módulo " + M.cronograma + " y vuelve a descargar para incluirlos.");
@@ -562,8 +679,8 @@ export default function AnalisisPareto() {
       estilar(wsResumen, r, 0, { font: { bold: true, color: { rgb: NAVY } }, border: bordes });
       estilar(wsResumen, r, 1, { alignment: { horizontal: "right" }, border: bordes });
     }
-    wsResumen[XLSX.utils.encode_cell({ r: rDatos1, c: 1 })].z = FMT_MONTO;
-    wsResumen[XLSX.utils.encode_cell({ r: rDatos1 + 2, c: 1 })].z = '0.0"×"';
+    wsResumen[XLSX.utils.encode_cell({ r: rTotal, c: 1 })].z = FMT_MONTO;
+    wsResumen[XLSX.utils.encode_cell({ r: rTotal + 2, c: 1 })].z = '0.0"×"';
     [rPct80, rPct90].forEach((r) => {
       wsResumen[XLSX.utils.encode_cell({ r, c: 2 })].z = "0%";
       estilar(wsResumen, r, 2, { alignment: { horizontal: "right" }, border: bordes });
@@ -759,7 +876,7 @@ export default function AnalisisPareto() {
       );
     }
 
-    const nombreArchivo = "obralyt-reporte-" + new Date().toISOString().slice(0, 10) + ".xlsx";
+    const nombreReporte = "obralyt-reporte-" + new Date().toISOString().slice(0, 10) + ".xlsx";
     try {
       const bytes = XLSX.write(wb, { type: "array", bookType: "xlsx" });
       const conGraficos = agregarGraficos(bytes, graficos, hojasCongeladas);
@@ -767,18 +884,21 @@ export default function AnalisisPareto() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = nombreArchivo;
+      a.download = nombreReporte;
       document.body.appendChild(a);
       a.click();
       setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 2000);
     } catch (err) {
       // Si algo falla al incrustar los gráficos, el reporte se descarga igual, solo que sin ellos.
-      XLSX.writeFile(wb, nombreArchivo);
+      XLSX.writeFile(wb, nombreReporte);
     }
   };
 
   return (
     <div className="max-w-4xl mx-auto p-4 bg-white text-gray-900 font-sans text-sm">
+      <FormularioContacto abierto={pidiendoContacto !== null} origen={pidiendoContacto || ""}
+        onCerrar={() => setPidiendoContacto(null)}
+        onListo={() => { setPidiendoContacto(null); handleExport(); }} />
       <h1 className="text-lg font-semibold mb-1">Analiza tu presupuesto</h1>
       <p className="text-xs text-gray-500 mb-4">Herramienta complementaria de análisis para toma de decisiones — no reemplaza a Project, Primavera ni al software de presupuesto que ya usas.</p>
 
@@ -789,7 +909,23 @@ export default function AnalisisPareto() {
       )}
 
       <div className="mb-4 bg-gray-50 p-3 rounded border border-gray-200">
-        <label className="text-xs text-gray-500 block mb-1">Importar presupuesto de construcción (Excel, .xls o .csv)</label>
+        <div className="mb-3 pb-3 border-b border-gray-200">
+          <label htmlFor="plazo-previo" className="text-xs font-medium text-gray-700 block mb-1">
+            1. ¿Cuánto durará la obra? <span className="font-normal text-gray-500">(opcional, pero hace el cronograma más preciso)</span>
+          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <input id="plazo-previo" type="number" min="0" step="any" inputMode="decimal" onWheel={(e) => e.currentTarget.blur()}
+              className="w-24 border border-gray-300 rounded px-2 py-1 text-right bg-white" placeholder="Ej: 8"
+              value={plazoPrevio} onChange={(e) => setPlazoPrevio(e.target.value)} />
+            <select aria-label="Unidad del plazo" className="border border-gray-300 rounded px-1 py-1 text-xs bg-white" value={unidadPrevia} onChange={(e) => setUnidadPrevia(e.target.value)}>
+              <option value="semanas">semanas</option>
+              <option value="meses">meses</option>
+              <option value="años">años</option>
+            </select>
+            <span className="text-xs text-gray-500">Si lo dejas vacío, OBRALYT lo busca en tu archivo (plazo declarado o partidas medidas en tiempo, como vigilancia o administración de obra).</span>
+          </div>
+        </div>
+        <label className="text-xs font-medium text-gray-700 block mb-1">2. Importa tu presupuesto de construcción (Excel, .xls o .csv)</label>
         {/* Selector de archivo propio: el control nativo del navegador sale en inglés ("Choose File"). */}
         <div className="flex flex-wrap items-center gap-3">
           <label className="inline-flex items-center cursor-pointer rounded px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2"
@@ -826,6 +962,9 @@ export default function AnalisisPareto() {
         )}
       </div>
 
+      {analizadas.length > 0 && <NavResultados onDescargar={() => pedirReporte("barra_resultados")} puedeDescargar={total > 0} />}
+      {analizadas.length > 0 && <VolverArriba />}
+
       <p className="text-xs font-semibold uppercase tracking-wide mt-2" style={{ color: "#C9922B" }}>Análisis principal — para usar antes de presentar la oferta</p>
 
       {MOSTRAR_COST_ANALYSIS && (
@@ -856,7 +995,7 @@ export default function AnalisisPareto() {
         </>
       )}
 
-      <h2 className="text-base font-semibold mt-2 mb-2">1. {M.costDrivers}</h2>
+      <h2 id="res-cost-drivers" className="text-base font-semibold mt-2 mb-2 scroll-mt-28">1. {M.costDrivers}</h2>
 
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3 mb-4 bg-gray-50 p-3 rounded border border-gray-200">
         <div className="flex items-center gap-2">
@@ -876,7 +1015,7 @@ export default function AnalisisPareto() {
             <p className="text-[10px] text-gray-400">suma de partidas, sin IVA</p>
           </div>
           <div className="sm:text-right">
-            <button onClick={handleExport} disabled={total === 0}
+            <button onClick={() => pedirReporte("cost_drivers")} disabled={total === 0}
               className="text-xs font-medium text-white rounded px-3 py-1.5 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
               style={{ background: "#C9922B" }}>
               Descargar reporte completo (Excel)
@@ -1074,16 +1213,16 @@ export default function AnalisisPareto() {
         <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#3A5A73" }}>Resultados complementarios</p>
         <p className="text-xs text-gray-500 mt-1 mb-2">A partir del mismo presupuesto, estas herramientas dan una referencia inicial de tiempo, dinero y compras. Son aproximaciones tempranas para apoyar tu oferta; no sustituyen tu programación detallada.</p>
       </div>
-      <h2 className="text-base font-semibold mt-4 mb-1">2. {M.cronograma}</h2>
+      <h2 id="res-cronograma" className="text-base font-semibold mt-4 mb-1 scroll-mt-28">2. {M.cronograma}</h2>
       <p className="text-xs text-gray-400 mb-2">Útil como anexo de la oferta y también durante la ejecución</p>
       <div className="mb-6 border border-gray-200 rounded p-3">
         {analizadas.length === 0 && <p className="text-xs text-gray-400 italic">Sube un presupuesto para poder estimar un cronograma.</p>}
         {analizadas.length > 0 && (
         <>
-        <div className="flex items-center justify-end gap-4 mb-3 flex-wrap">
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-500" title="Define en qué punto de una fase arranca la siguiente.">Encadenamiento</label>
-            <select className="border border-gray-200 rounded px-1 py-0.5 text-xs" value={solape} onChange={(e) => setSolape(Number(e.target.value))}>
+        <div className="flex items-center justify-end gap-x-4 gap-y-2 mb-3 flex-wrap">
+          <div className="flex items-center gap-2 max-w-full min-w-0">
+            <label className="text-xs text-gray-500 shrink-0" title="Define en qué punto de una fase arranca la siguiente.">Encadenamiento</label>
+            <select className="border border-gray-200 rounded px-1 py-0.5 text-xs min-w-0 max-w-full" value={solape} onChange={(e) => setSolape(Number(e.target.value))}>
               <option value={0}>Cada fase empieza al terminar la anterior</option>
               <option value={15}>Empieza con la anterior al 85% (solape leve)</option>
               <option value={30}>Empieza con la anterior al 70% (solape moderado)</option>
@@ -1105,13 +1244,24 @@ export default function AnalisisPareto() {
               placeholder={unidadEfectiva === "semanas" ? "Ej: 36" : unidadEfectiva === "meses" ? "Ej: 8" : "Ej: 2"}
               step="any"
               value={plazoTotal === null ? "" : aUnidad(plazoTotal)}
-              onChange={(e) => { const raw = e.target.value; setPlazoTotal(raw === "" ? null : aDias(Number(raw))); }} />
+              onChange={(e) => { const raw = e.target.value; setPlazoTotal(raw === "" ? null : aDias(Number(raw))); setFuentePlazo(raw === "" ? null : { tipo: "usuario" }); }} />
           </div>
         </div>
         {plazoEsProvisional && (
-          <p className="text-xs mb-3 px-2 py-1.5 rounded" style={{ background: "#FBEFD9", color: "#8A5A0B" }}>
-            Plazo provisional de {plazoTexto(plazoTotal)}: OBRALYT no puede deducir la duración real de tu obra.
-            Escribe arriba el plazo de tu proyecto y el cronograma, el {M.flujoCaja} y las {M.procura} se recalculan.
+          <p className="text-xs mb-3 px-2 py-1.5 rounded border" style={{ background: "#FBEFD9", color: "#8A5A0B", borderColor: "#C9922B" }}>
+            <strong>Falta el plazo de tu obra.</strong> Tu archivo no lo indica, así que el cronograma usa un plazo provisional de {plazoTexto(plazoTotal)}.
+            Escribe arriba la duración real (en semanas, meses o años) y el cronograma, el {M.flujoCaja} y las {M.procura} se recalculan al instante.
+          </p>
+        )}
+        {fuentePlazo && fuentePlazo.tipo === "archivo" && (
+          <p className="text-xs mb-3 px-2 py-1.5 rounded" style={{ background: fuentePlazo.confianza === "alta" ? "#ECFDF3" : "#FBEFD9", color: fuentePlazo.confianza === "alta" ? "#166534" : "#8A5A0B" }}>
+            Plazo tomado de tu archivo: <strong>{fuentePlazo.detalle}</strong>.
+            {fuentePlazo.confianza === "alta" ? " Si no corresponde, cámbialo arriba." : " Es una partida medida en tiempo, no necesariamente la duración total: confírmalo o cámbialo arriba."}
+          </p>
+        )}
+        {fuentePlazo && fuentePlazo.tipo === "previo" && (
+          <p className="text-xs mb-3 px-2 py-1.5 rounded" style={{ background: "#ECFDF3", color: "#166534" }}>
+            Cronograma calculado con el plazo que indicaste antes de subir el archivo. Puedes ajustarlo arriba.
           </p>
         )}
         {plazoTotal !== null && plazoTotal > 0 && (
@@ -1193,7 +1343,7 @@ export default function AnalisisPareto() {
         )}
       </div>
 
-      <h2 className="text-base font-semibold mt-6 mb-1">3. {M.flujoCaja}</h2>
+      <h2 id="res-flujo" className="text-base font-semibold mt-6 mb-1 scroll-mt-28">3. {M.flujoCaja}</h2>
       <p className="text-xs text-gray-400 mb-2">Útil como anexo de la oferta y también durante la ejecución</p>
       <div className="mb-6 border border-gray-200 rounded p-3">
         {(analizadas.length === 0 || plazoTotal === null) ? (
@@ -1225,7 +1375,7 @@ export default function AnalisisPareto() {
         )}
       </div>
 
-      <h2 className="text-base font-semibold mt-6 mb-1">4. {M.procura}</h2>
+      <h2 id="res-procura" className="text-base font-semibold mt-6 mb-1 scroll-mt-28">4. {M.procura}</h2>
       <p className="text-xs text-gray-400 mb-2">Ejecución — para usar una vez adjudicado el proyecto</p>
       <div className="mb-6 border border-gray-200 rounded p-3">
         <p className="text-xs text-gray-500 mb-3">
@@ -1293,7 +1443,7 @@ export default function AnalisisPareto() {
         </>
       )}
 
-      <h2 className="text-base font-semibold mt-6 mb-2">5. {M.reporteEjecutivo}</h2>
+      <h2 id="res-ejecutivo" className="text-base font-semibold mt-6 mb-2 scroll-mt-28">5. {M.reporteEjecutivo}</h2>
       <div className="mb-6 border border-gray-200 rounded p-3 bg-gray-50">
         <p className={analizadas.length ? "text-sm text-gray-800 leading-relaxed" : "text-xs text-gray-400 italic"}>
           {analizadas.length ? textoEjecutivo : "Sube un presupuesto para generar el reporte ejecutivo."}

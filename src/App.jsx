@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import AnalisisPareto from "./AnalisisPareto.jsx";
 import Legal from "./Legal.jsx";
+import Panel from "./Panel.jsx";
 import { iniciarMedicion, registrarEvento, observarSecciones } from "./medicion.js";
 import logoHero from "./assets/obralyt-web-hero.svg";
 import logoHeader from "./assets/obralyt-web-header.svg";
@@ -54,19 +55,34 @@ function verEjemplo(e, ubicacion) {
 // Clic en un botón que lleva a la herramienta (se registra desde qué parte de la página).
 const clicProbar = (ubicacion) => () => registrarEvento("clic_probar", { ubicacion });
 
-const SECCIONES_MEDIDAS = ["como-funciona", "caso-real", "nucleo", "vista-previa", "herramienta", "complementarios", "que-es", "fundador", "preguntas", "cta-final"];
+const SECCIONES_MEDIDAS = ["como-funciona", "video", "caso-real", "nucleo", "vista-previa", "herramienta", "complementarios", "que-es", "fundador", "preguntas", "cta-final"];
+
+// Menú de la página: lleva a cada bloque sin tener que desplazarse a ciegas.
+const MENU = [
+  { href: "#como-funciona", texto: "Cómo funciona" },
+  { href: "#video", texto: "Video" },
+  { href: "#herramienta", texto: "Herramienta" },
+  { href: "#que-es", texto: "Qué es" },
+  { href: "#preguntas", texto: "Preguntas" },
+];
 
 export default function App() {
   const hash = usarHash();
+  const [menuAbierto, setMenuAbierto] = useState(false);
+  useEffect(() => { setMenuAbierto(false); }, [hash]);
   const esLegal = hash === "#/privacidad" || hash === "#/terminos";
-  useEffect(() => { iniciarMedicion(); }, []);
+  const esPanel = hash === "#/panel";
+  // El panel privado no se mide (así las visitas de Carlos no ensucian las estadísticas).
+  useEffect(() => { if (!esPanel) iniciarMedicion(); }, []);
   useEffect(() => {
+    if (esPanel) return undefined;
     if (esLegal) {
       registrarEvento("pagina_legal_vista", { pagina: hash.slice(2) });
       return undefined;
     }
     return observarSecciones(SECCIONES_MEDIDAS);
   }, [hash, esLegal]);
+  if (esPanel) return <Panel />;
   if (hash === "#/privacidad") return <Legal tipo="privacidad" />;
   if (hash === "#/terminos") return <Legal tipo="terminos" />;
 
@@ -75,14 +91,25 @@ export default function App() {
       {/* Barra superior */}
       <header className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-gray-100">
         <div className="max-w-5xl mx-auto px-4 py-2 flex items-center justify-between">
-          <img src={logoHeader} alt="OBRALYT" className="h-9 w-auto" />
-          <nav className="flex items-center gap-4 text-sm">
-            <a href="#que-es" className="hidden sm:inline text-gray-600 hover:text-obralyt-dark">Qué es</a>
-            <a href="#caso-real" className="hidden sm:inline text-gray-600 hover:text-obralyt-dark">Caso real</a>
-            <a href="#preguntas" className="hidden sm:inline text-gray-600 hover:text-obralyt-dark">Preguntas</a>
-            <a href="#herramienta" onClick={clicProbar("barra_superior")} className={btnCta + " text-sm px-4 py-1.5 rounded"}>{T.cta}</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: "smooth" }); }} aria-label="Ir al inicio">
+            <img src={logoHeader} alt="OBRALYT" className="h-7 sm:h-9 w-auto" />
+          </a>
+          <nav aria-label="Secciones de la página" className="flex items-center gap-3 sm:gap-4 text-sm">
+            {MENU.map((m) => (
+              <a key={m.href} href={m.href} className="hidden md:inline text-gray-600 hover:text-obralyt-dark">{m.texto}</a>
+            ))}
+            <a href="#herramienta" onClick={clicProbar("barra_superior")} className={btnCta + " text-sm px-3 sm:px-4 py-1.5 rounded whitespace-nowrap"}>{T.cta}</a>
+            <button type="button" className="md:hidden text-obralyt-dark px-1 text-xl leading-none" aria-expanded={menuAbierto} aria-label="Abrir menú"
+              onClick={() => setMenuAbierto((v) => !v)}>{menuAbierto ? "✕" : "☰"}</button>
           </nav>
         </div>
+        {menuAbierto && (
+          <div className="md:hidden border-t border-gray-100 bg-white">
+            {MENU.map((m) => (
+              <a key={m.href} href={m.href} onClick={() => setMenuAbierto(false)} className="block px-4 py-3 text-sm text-gray-700 border-b border-gray-50">{m.texto}</a>
+            ))}
+          </div>
+        )}
       </header>
 
       {/* Encabezado: logo, "inteligencia de costos" legible, mensaje de 10 segundos, apoyo y botones */}
@@ -107,7 +134,7 @@ export default function App() {
       </section>
 
       {/* Cómo funciona */}
-      <section id="como-funciona" className="max-w-5xl mx-auto px-4 pt-10 pb-6">
+      <section id="como-funciona" className="max-w-5xl mx-auto px-4 pt-10 pb-6 scroll-mt-14">
         <h2 className="text-xl font-semibold mb-1 text-center">{T.pasosTitulo}</h2>
         <p className="text-gray-500 text-sm text-center mb-6">{T.pasosSubtitulo}</p>
         <div className="grid md:grid-cols-3 gap-4">
@@ -118,6 +145,24 @@ export default function App() {
               <p className="text-sm text-gray-700 leading-relaxed"><Texto>{p.texto}</Texto></p>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* Video explicativo */}
+      <section id="video" className="bg-[#F7F5F1] border-y border-gray-200 scroll-mt-14">
+        <div className="max-w-4xl mx-auto px-4 py-10">
+          <h2 className="text-xl font-semibold mb-1 text-center">Mira cómo funciona en un minuto</h2>
+          <p className="text-gray-500 text-sm text-center mb-5">Un recorrido real por la herramienta con un presupuesto de ejemplo: de subir el archivo al reporte en Excel.</p>
+          <video className="w-full rounded-xl border border-gray-200 shadow-sm bg-white" controls playsInline preload="none"
+            poster="/video/obralyt-como-funciona.jpg"
+            onPlay={(e) => { if (!e.currentTarget.dataset.medido) { e.currentTarget.dataset.medido = "1"; registrarEvento("video_reproducido"); } }}
+            onEnded={() => registrarEvento("video_completado")}>
+            <source src="/video/obralyt-como-funciona.mp4" type="video/mp4" />
+            Tu navegador no puede reproducir este video.
+          </video>
+          <p className="text-center mt-4">
+            <a href="#herramienta" onClick={clicProbar("video")} className={btnCta + " text-sm px-5 py-2"}>Probar con mi presupuesto</a>
+          </p>
         </div>
       </section>
 
@@ -182,7 +227,8 @@ export default function App() {
         <div className="max-w-5xl mx-auto px-4 py-10">
           <h2 className="text-xl font-semibold mb-2 text-center">{T.herramientaTitulo}</h2>
           <p className="text-gray-500 text-sm text-center mb-8 max-w-2xl mx-auto">{T.herramientaTexto}</p>
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          {/* Sin overflow-hidden: impediría que la barra de secciones del análisis quede fija al desplazarse. */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200">
             <AnalisisPareto />
           </div>
         </div>

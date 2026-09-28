@@ -142,10 +142,54 @@ function detectarPorEncabezados(filas) {
 
     // Código: columna con encabezado de código distinta de las anteriores.
     const codigoCol = cols.find((k) => k.codigo && k.i !== nombre && k.i !== monto);
-    mejor = { headerRowIdx: r, nameIdx: nombre, amountIdx: monto, qtyIdx: cantidad, unitIdx: unitario, codigoIdx: codigoCol ? codigoCol.i : -1, otrasDeMonto, porContenido: false };
+    // Unidad de medida y cantidad: se leen siempre (sirven para detectar el plazo de obra
+    // en partidas medidas en meses, semanas o días), aunque el monto venga en su propia columna.
+    const unidadCol = cols.find((k) => k.unidad && k.i !== nombre && k.i !== monto);
+    const qCol = cantidad !== -1 ? cols[cantidad] : cols.find((k) => k.cantidad && k.i !== nombre && k.i !== monto);
+    mejor = {
+      headerRowIdx: r, nameIdx: nombre, amountIdx: monto, qtyIdx: cantidad, unitIdx: unitario,
+      codigoIdx: codigoCol ? codigoCol.i : -1, otrasDeMonto, porContenido: false,
+      uomIdx: unidadCol ? unidadCol.i : -1, cantIdx: qCol ? qCol.i : -1,
+    };
+    corregirColumnaMonto(filas, mejor, cols);
     break;
   }
   return mejor;
+}
+
+// Muchos presupuestos traen "Precio" (unitario) y "Parcial" / "Importe" (total) a la vez, con
+// encabezados que no dicen cuál es cuál. La prueba definitiva es aritmética: la columna del
+// monto es la que resulta de multiplicar la cantidad por otra columna (el precio unitario).
+function corregirColumnaMonto(filas, det, cols) {
+  if (det.cantIdx === -1 || det.amountIdx === -1) return;
+  const q = det.cantIdx;
+  const candidatas = cols.filter((k) => k.i !== q && k.i !== det.nameIdx && k.i !== det.codigoIdx && k.i !== det.uomIdx).map((k) => k.i);
+  const desde = det.headerRowIdx + 1;
+  const hasta = Math.min(filas.length, desde + 400);
+  let mejor = null;
+  for (const total of candidatas) {
+    for (const unit of candidatas) {
+      if (unit === total) continue;
+      let conDatos = 0;
+      let cuadran = 0;
+      for (let r = desde; r < hasta; r++) {
+        const f = filas[r];
+        if (!f) continue;
+        const cq = parsearNumero(f[q]);
+        const cu = parsearNumero(f[unit]);
+        const ct = parsearNumero(f[total]);
+        if (!(cq > 0) || !(cu > 0) || !(ct > 0)) continue;
+        conDatos++;
+        if (Math.abs(cq * cu - ct) <= Math.max(0.02, Math.abs(ct) * 0.01)) cuadran++;
+      }
+      if (conDatos >= 3 && cuadran / conDatos >= 0.6 && (!mejor || cuadran > mejor.cuadran)) mejor = { total, unit, cuadran };
+    }
+  }
+  if (mejor && mejor.total !== det.amountIdx) {
+    det.columnaCorregida = { antes: det.amountIdx, ahora: mejor.total };
+    det.amountIdx = mejor.total;
+    det.otrasDeMonto = det.otrasDeMonto.filter((i) => i !== mejor.total);
+  }
 }
 
 // Último recurso: el archivo no trae encabezados reconocibles. Se deduce por el contenido:
@@ -181,7 +225,9 @@ function detectarPorContenido(filas) {
   if (!monto) return null;
   let primera = filas.findIndex((f) => f && !vacia(f[nombre.c]) && String(f[nombre.c]).trim().length >= 4 && parsearNumero(f[monto.c]) > 0);
   if (primera < 0) primera = 0;
-  return { headerRowIdx: primera - 1, nameIdx: nombre.c, amountIdx: monto.c, qtyIdx: -1, unitIdx: -1, codigoIdx: -1, otrasDeMonto: [], porContenido: true };
+  // Sin encabezados, la unidad de medida suele ser una columna corta de texto ("m2", "mes", "und").
+  const unidadCont = stats.find((s) => s.c !== nombre.c && s.c !== monto.c && muestra.filter((f) => f && typeof f[s.c] === "string" && /^[a-zA-Z0-9²³.\/ ]{1,6}$/.test(f[s.c].trim())).length >= 5);
+  return { headerRowIdx: primera - 1, nameIdx: nombre.c, amountIdx: monto.c, qtyIdx: -1, unitIdx: -1, codigoIdx: -1, otrasDeMonto: [], porContenido: true, uomIdx: unidadCont ? unidadCont.c : -1, cantIdx: -1 };
 }
 
 // ---------------------------------------------------------------- lectura de una hoja
@@ -192,6 +238,69 @@ const NO_ES_CAPITULO = /^(partidas?|descripci[oó]n|description|[ií]tem|item|to
 const FILA_DE_TOTAL = /^\s*(i\.?v\.?a\b|i\.?g\.?v\b|impuesto|sub-?total|total\b|grand total|tax\b|vat\b|sales tax)/i;
 // Líneas que suelen ser ajustes financieros y no trabajos de obra: se avisan, no se excluyen.
 const LINEA_DE_AJUSTE = /variaci[oó]n de precios|escalaci[oó]n|imprevistos|reajuste de precios|contingencias?\b|contingency|escalation|price adjustment|incremento por modificaci|aumento de costos|ajuste por inflaci/i;
+// Rubros de cierre del presupuesto (se calculan como % del costo directo): no son partidas de obra.
+const RUBRO_DE_CIERRE = /^\s*(total\s+)?(costo|costos)\s+(directo|indirecto)s?\b|^\s*gastos?\s+generales\b|^\s*utilidad(es)?\b|^\s*a\.?\s?i\.?\s?u\b|^\s*administraci[oó]n,?\s+imprevistos|^\s*overhead\b|^\s*profit\b|^\s*financiamiento\b|^\s*(fianzas?|p[oó]lizas?)\s+y\b/i;
+// A partir de estas filas, lo que sigue es el cierre del presupuesto (totales, impuestos, % de ley).
+const FIN_DE_PARTIDAS = /^\s*(total\s+)?costo\s+directo\b|^\s*total\s+(general|presupuesto|de\s+la\s+obra|obra|del\s+presupuesto)\b|^\s*presupuesto\s+total\b|^\s*grand\s+total\b|^\s*monto\s+total\s+(de\s+la\s+)?(obra|oferta|presupuesto)\b/i;
+
+// ---------------------------------------------------------------- plazo de obra
+
+// Unidades de medida que son tiempo (en días por unidad).
+function diasDeUnidad(u) {
+  const t = normalizarEncabezado(u).replace(/\s/g, "");
+  if (/^(mes|meses|mensual|mensuales|mo|month|months|mth|mths|mes(es)?\/?obra)$/.test(t)) return 30;
+  if (/^(sem|semana|semanas|semanal|wk|wks|week|weeks)$/.test(t)) return 7;
+  if (/^(dia|dias|d|dd|day|days|diacalendario|diascalendario)$/.test(t)) return 1;
+  if (/^(ano|anos|anio|anios|a|year|years|yr|yrs)$/.test(t)) return 365;
+  return 0;
+}
+// Partidas que por su naturaleza duran toda la obra (se pagan por tiempo mientras dura la obra).
+const PARTIDA_DE_PLAZO = /vigilan|seguridad de obra|guardian|celador|administraci[oó]n de (la )?obra|residen|direcci[oó]n (t[eé]cnica|de obra)|supervisi|inspecci[oó]n|gerencia de (obra|proyecto)|ingenier[oa] (residente|de obra)|maestro de obra|capataz|personal t[eé]cnico|campamento|caseta|obrador|oficina de obra|mantenimiento de (instalaciones|campamento|caseta|obrador)|ba[nñ]os? (port[aá]til|qu[ií]mic)|sanitarios? port[aá]til|servicios? (b[aá]sicos|provisionales)|plazo|duraci[oó]n|site (supervision|management|security)|project management|superintend|site office|temporary facilities|welfare/i;
+
+// Busca "plazo de ejecución: 120 días", "Plazo contractual 18 meses", "duration: 10 weeks"…
+const PLAZO_EN_TEXTO = /(plazo(?:\s+(?:de\s+)?(?:ejecuci[oó]n|obra|contractual|total|de\s+la\s+obra|estimado|previsto))?|duraci[oó]n(?:\s+de\s+(?:la\s+)?obra)?|tiempo\s+de\s+ejecuci[oó]n|duration|construction\s+period|contract\s+period|completion\s+time)\s*[:=]?\s*(?:de\s+)?(\d+(?:[.,]\d+)?)\s*(d[ií]as?(?:\s+(?:calendario|continuos|h[aá]biles|laborables))?|days?|semanas?|weeks?|meses|mes|months?|a[nñ]os?|years?)/i;
+
+function plazoDeTexto(texto) {
+  const m = PLAZO_EN_TEXTO.exec(texto || "");
+  if (!m) return null;
+  const n = parseFloat(m[2].replace(",", "."));
+  const u = m[3].toLowerCase();
+  let dias;
+  if (/^d/.test(u)) dias = /h[aá]biles|laborables/.test(u) ? Math.round(n * 7 / 5) : n;
+  else if (/^(sem|week)/.test(u)) dias = n * 7;
+  else if (/^(mes|month)/.test(u)) dias = n * 30;
+  else dias = n * 365;
+  if (!(dias >= 7 && dias <= 3650 * 2)) return null;
+  return { dias: Math.round(dias), fuente: "texto", detalle: m[0].replace(/\s+/g, " ").trim() };
+}
+
+// Evidencia del plazo dentro del propio archivo, de más a menos confiable:
+// 1) el archivo lo declara ("Plazo de ejecución: 120 días");
+// 2) una partida que dura toda la obra medida en tiempo ("Vigilancia de obra — mes — 12");
+// 3) cualquier otra partida medida en tiempo (evidencia débil: se ofrece como sugerencia).
+export function detectarPlazo(partidas, textoArchivo) {
+  const deTexto = plazoDeTexto(textoArchivo) || partidas.map((p) => plazoDeTexto(p.name)).find(Boolean);
+  if (deTexto) return { ...deTexto, confianza: "alta" };
+  const conTiempo = partidas
+    .map((p) => {
+      const dpu = diasDeUnidad(p.unidad);
+      if (!dpu || !(p.cantidad > 0)) return null;
+      const dias = p.cantidad * dpu;
+      if (dias < 7 || dias > 3650 * 2) return null;
+      return { p, dias };
+    })
+    .filter(Boolean);
+  if (!conTiempo.length) return null;
+  const dePlazo = conTiempo.filter((x) => PARTIDA_DE_PLAZO.test(x.p.name));
+  const elegidas = dePlazo.length ? dePlazo : conTiempo;
+  const mayor = elegidas.reduce((a, b) => (b.dias > a.dias ? b : a));
+  return {
+    dias: Math.round(mayor.dias),
+    fuente: "partida",
+    detalle: (mayor.p.codigo ? mayor.p.codigo + " " : "") + mayor.p.name + " (" + mayor.p.cantidad + " " + mayor.p.unidad + ")",
+    confianza: dePlazo.length ? "alta" : "media",
+  };
+}
 
 function prefijoCodigo(codigo) {
   if (!codigo) return null;
@@ -242,8 +351,10 @@ export function leerHoja(hoja) {
   }
   const colTope = encabezados.size ? Math.min(...[...encabezados.values()].map((h) => h.col)) : -1;
 
-  const partidas = [];
+  const { uomIdx = -1, cantIdx = -1 } = det;
+  let candidatas = [];
   let sinMonto = 0;
+  const rubrosCierre = [];
   let capituloActual = null;
   for (let r = headerRowIdx + 1; r < filas.length; r++) {
     const row = filas[r];
@@ -256,17 +367,74 @@ export function leerHoja(hoja) {
     const name = row[nameIdx];
     const amount = montoDe(row);
     const nombreLimpio = name ? String(name).trim().replace(/^(descripci[oó]n|description)\s*:\s*/i, "") : "";
-    if (!nombreLimpio || FILA_DE_TOTAL.test(nombreLimpio)) continue;
+    if (!nombreLimpio) continue;
     const codigo = codigoIdx !== -1 && !vacia(row[codigoIdx]) ? String(row[codigoIdx]).trim() : null;
+    const unidad = uomIdx !== -1 && !vacia(row[uomIdx]) ? String(row[uomIdx]).trim() : "";
+    const cantidadNum = cantIdx !== -1 ? parsearNumero(row[cantIdx]) : NaN;
+    const sinMedicion = !unidad && !(cantidadNum > 0);
+    // Desde "Costo directo" o "Total general" hacia abajo solo hay cierre del presupuesto.
+    if (!codigo && FIN_DE_PARTIDAS.test(nombreLimpio)) break;
+    if (FILA_DE_TOTAL.test(nombreLimpio)) continue;
+    // Gastos generales, utilidad, AIU…: se calculan sobre el costo directo, no son obra.
+    if (RUBRO_DE_CIERRE.test(nombreLimpio) && (sinMedicion || /%/.test(nombreLimpio))) {
+      if (amount > 0) rubrosCierre.push(nombreLimpio);
+      continue;
+    }
     // Partida escrita en el archivo pero con monto cero: puede ser una omisión del presupuesto.
     if (amount === 0 && (codigo || typeof row[0] === "number")) { sinMonto += 1; continue; }
     if (Number.isNaN(amount) || amount <= 0) continue;
-    partidas.push({
-      orden: partidas.length, name: nombreLimpio, monto: amount, codigo,
-      capitulo: capituloActual, categoria: codigo ? prefijoCodigo(codigo) : null,
-      esAjuste: LINEA_DE_AJUSTE.test(nombreLimpio),
+    candidatas.push({
+      fila: r, name: nombreLimpio, monto: amount, codigo, unidad,
+      cantidad: cantidadNum > 0 ? cantidadNum : null, sinMedicion,
+      capitulo: capituloActual,
     });
   }
+
+  // Capítulos con subtotal en la misma columna del monto (formato S10, Presupuestos, Excel propio):
+  // la fila "01 OBRAS PRELIMINARES  5.300" no es una partida más, es la suma de sus hijas.
+  // Se detectan por código jerárquico (01 → 01.01) o, sin códigos, porque su monto es la suma
+  // exacta de las filas siguientes. Se usan como capítulo y no se cuentan dos veces.
+  const esPadrePorCodigo = (c, i) => {
+    if (!c.codigo) return false;
+    const base = c.codigo.replace(/[.\-]+$/, "");
+    return candidatas.some((o, j) => j !== i && o.codigo && o.codigo.length > base.length && /^[.\-\s]/.test(o.codigo.slice(base.length)) && o.codigo.startsWith(base));
+  };
+  const padres = new Set();
+  candidatas.forEach((c, i) => { if (esPadrePorCodigo(c, i)) padres.add(i); });
+  if (!padres.size) {
+    candidatas.forEach((c, i) => {
+      if (!c.sinMedicion || (uomIdx === -1 && cantIdx === -1)) return;
+      let suma = 0;
+      for (let j = i + 1; j < candidatas.length && !candidatas[j].sinMedicion; j++) {
+        suma += candidatas[j].monto;
+        if (Math.abs(suma - c.monto) <= Math.max(0.05, c.monto * 0.001)) { padres.add(i); break; }
+        if (suma > c.monto * 1.001) break;
+      }
+    });
+  }
+  let capitulosPorSubtotal = 0;
+  if (padres.size) {
+    // El nivel superior de la jerarquía es el capítulo de cada partida.
+    let capActual = null;
+    let nivelTope = Infinity;
+    padres.forEach((i) => { const c = candidatas[i]; if (c.codigo) nivelTope = Math.min(nivelTope, c.codigo.split(/[.\-]/).filter(Boolean).length); });
+    candidatas.forEach((c, i) => {
+      if (padres.has(i)) {
+        const nivel = c.codigo ? c.codigo.split(/[.\-]/).filter(Boolean).length : nivelTope;
+        if (!c.codigo || nivel === nivelTope) { capActual = limpiarCapitulo((c.codigo ? c.codigo + " " : "") + c.name); capitulosPorSubtotal++; }
+      } else if (capActual && !c.capitulo) {
+        c.capitulo = capActual;
+      }
+    });
+    candidatas = candidatas.filter((_, i) => !padres.has(i));
+  }
+
+  const partidas = candidatas.map((c, k) => ({
+    orden: k, name: c.name, monto: c.monto, codigo: c.codigo,
+    unidad: c.unidad, cantidad: c.cantidad,
+    capitulo: c.capitulo, categoria: c.codigo ? prefijoCodigo(c.codigo) : null,
+    esAjuste: LINEA_DE_AJUSTE.test(c.name),
+  }));
   if (partidas.length === 0) {
     // Fórmulas sin valor calculado (archivos generados por programas que no guardan resultados).
     let sinCalcular = 0;
@@ -294,7 +462,7 @@ export function leerHoja(hoja) {
     const row = filas[r];
     if (!row || !row.some((c) => !vacia(c))) continue;
     revisadas += 1;
-    if (!row.some((c) => typeof c === "string" && /total|sub-?total/i.test(c))) continue;
+    if (!row.some((c) => typeof c === "string" && /total|sub-?total|costo\s+directo/i.test(c))) continue;
     for (const c of row) {
       const n = parsearNumero(c);
       if (n > 0 && Math.abs(n - totalImportado) / totalImportado < 0.005) { totalArchivo = n; break; }
@@ -309,8 +477,12 @@ export function leerHoja(hoja) {
     notas.push("El archivo no trae encabezados reconocibles: se asumió que la columna " + letra(nameIdx) + " es la descripción y la columna " + letra(amountIdx) + " es el monto. Verifica que sea correcto.");
   } else {
     if (amountIdx === -1) notas.push("El archivo no trae una columna de monto: se calculó multiplicando la cantidad (columna " + letra(qtyIdx) + ") por el precio unitario (columna " + letra(unitIdx) + ").");
+    if (det.columnaCorregida) notas.push("Se tomó como monto la columna " + letra(amountIdx) + " (" + String(filas[headerRowIdx][amountIdx] ?? "").trim() + ") porque es la que resulta de cantidad × precio unitario.");
     if (det.otrasDeMonto.length) notas.push("El archivo tiene varias columnas de monto; se usó la columna " + letra(amountIdx) + " (" + String(filas[headerRowIdx][amountIdx]).trim() + "), la de mayor valor. Si no es la correcta, deja en el archivo solo la que quieres analizar.");
   }
+
+  if (capitulosPorSubtotal) notas.push("Se reconocieron " + capitulosPorSubtotal + " capítulos con subtotal propio; sus montos no se sumaron dos veces.");
+  if (rubrosCierre.length) notas.push("No se incluyeron en el análisis los rubros de cierre del presupuesto (" + rubrosCierre.slice(0, 4).map((t) => "«" + t + "»").join(", ") + (rubrosCierre.length > 4 ? "…" : "") + "): se calculan sobre el costo directo y no son partidas de obra.");
 
   return { partidas, sinMonto, totalArchivo, textoContexto, totalImportado, notas, capitulos: usarCapitulos ? capitulosDistintos.size : 0, filas: filas.length };
 }
@@ -378,7 +550,11 @@ export function leerPresupuesto(bytes) {
     }
   }
   mejor.moneda = /(^|[^a-zñ])bs\.?s?([^a-zñ]|$)|bol[ií]vares\b/i.test(textoLibro) ? "Bs. "
-    : /US\$|\bUSD\b|\bd[oó]lares\b|\(\$\)|\$\s*\d/i.test(textoLibro) ? "$" : "";
+    : /US\$|\bUSD\b|\bd[oó]lares\b|\(\$\)|\$\s*\d/i.test(textoLibro) ? "$"
+    : /S\/\.?|\bsoles\b|\bPEN\b/.test(textoLibro) ? "S/ "
+    : /€|\bEUR\b|\beuros?\b/i.test(textoLibro) ? "€ " : "";
+  // Plazo de obra: se busca en todo el libro (carátula, condiciones) y en las partidas.
+  mejor.plazoDetectado = detectarPlazo(mejor.partidas, textoLibro);
   delete mejor.textoContexto;
 
   return { ...mejor, hojaUsadaEsPrimera: libro.SheetNames[0] === mejor.hoja, otrasHojas: otras, totalHojas: libro.SheetNames.length };

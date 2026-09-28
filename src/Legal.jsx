@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import logoHeader from "./assets/obralyt-web-header.svg";
 import { CORREO_CONTACTO } from "./textos.js";
-import { UMAMI_WEBSITE_ID } from "./medicion.js";
 
 // Páginas de Privacidad y Términos de uso. Se muestran con la dirección #/privacidad y #/terminos.
 // Versión 2. Si más adelante se constituye una empresa (p. ej. una LLC), basta con cambiar TITULAR.
@@ -9,9 +8,9 @@ const TITULAR = "Carlos Magallanes";
 const DOMICILIO = "Miami, Florida, Estados Unidos";
 const LEY_APLICABLE = "el estado de Florida, Estados Unidos";
 const TRIBUNALES = "los tribunales estatales o federales con sede en el condado de Miami-Dade, Florida";
-const FECHA = "26 de septiembre de 2026";
-// La sección de estadísticas describe solo las herramientas que están activas.
-const CON_UMAMI = Boolean(UMAMI_WEBSITE_ID);
+const FECHA = "28 de septiembre de 2026";
+// Proveedor del buzón de correo corporativo. Cambiar aquí cuando se migre (p. ej. a Zoho Mail).
+const PROVEEDOR_CORREO = "Google (Gmail), a través de Cloudflare Email Routing";
 
 const PRIVACIDAD = [
   {
@@ -24,38 +23,37 @@ const PRIVACIDAD = [
     t: "2. Tu presupuesto no sale de tu computadora",
     p: [
       "El análisis se ejecuta completamente en tu navegador. El archivo que cargas (Excel o CSV) no se sube ni se envía a servidores de OBRALYT ni de terceros, y OBRALYT no tiene acceso a su contenido ni lo almacena.",
-      "Al cerrar o recargar la página, los datos del análisis desaparecen de la memoria del navegador. Los reportes en Excel se generan en tu equipo y quedan donde tú los guardes. OBRALYT no usa cookies ni almacenamiento local del navegador para guardar tu información.",
+      "Al cerrar o recargar la página, los datos del análisis desaparecen de la memoria del navegador. Los reportes en Excel se generan en tu equipo y quedan donde tú los guardes. OBRALYT no usa cookies. Solo guarda en tu navegador dos notas técnicas: un identificador al azar de la visita, que se borra al cerrar la pestaña, y una marca de que ya dejaste tus datos de contacto, para no volver a pedírtelos.",
     ],
   },
   {
     t: "3. Qué datos sí se tratan",
     p: [
       "Datos técnicos de la visita: el sitio está alojado en Cloudflare, que, como cualquier proveedor de alojamiento, procesa datos técnicos necesarios para entregar la página y protegerla (por ejemplo, dirección IP, tipo de navegador y dispositivo, página solicitada, fecha y hora).",
-      "Estadísticas de uso agregadas: usamos Cloudflare Web Analytics para conocer cuántas visitas recibe el sitio y cómo se comporta técnicamente. Según Cloudflare, esta herramienta no usa cookies ni almacenamiento local y no crea perfiles individuales; OBRALYT solo ve cifras agregadas (visitas, páginas, país, tipo de dispositivo)." +
-        (CON_UMAMI
-          ? " También usamos Umami, una herramienta de medición sin cookies, para saber de dónde llegan las visitas (por ejemplo, un enlace de LinkedIn o una campaña), qué secciones se ven y en qué botones se hace clic (por ejemplo, «Ver ejemplo», «Descargar reporte» o abrir una pregunta frecuente). Esos registros nunca incluyen el contenido de tu presupuesto, el nombre del archivo, montos ni resultados del análisis."
-          : ""),
-      "Mensajes que nos envías: si escribes a " + CORREO_CONTACTO + ", tratamos tu dirección de correo, tu nombre si lo indicas y el contenido del mensaje. El correo se recibe a través de Cloudflare Email Routing y se gestiona en una cuenta de Google (Gmail).",
-      "No pedimos registro, no recogemos datos de pago y no vendemos, alquilamos ni compartimos datos personales con fines publicitarios.",
+      "Estadísticas de uso agregadas: usamos Cloudflare Web Analytics para conocer cuántas visitas recibe el sitio y cómo se comporta técnicamente. Según Cloudflare, esta herramienta no usa cookies ni almacenamiento local y no crea perfiles individuales.",
+      "Medición de navegación propia: para mejorar el sitio y nuestro marketing registramos, con un identificador al azar que dura solo mientras la pestaña está abierta, de dónde llega la visita (el sitio de origen, como linkedin.com, y los parámetros de campaña «utm»), el país aproximado según la conexión, el tipo de dispositivo, qué secciones se ven, cuánto tiempo se permanece, en qué botones se hace clic y si se usa la herramienta (por ejemplo, «cargó un archivo», «usó el ejemplo», «descargó el reporte»). No guardamos tu dirección IP en estos registros, y nunca incluyen el contenido de tu presupuesto, el nombre del archivo, montos ni resultados del análisis.",
+      "Datos de contacto que nos das: para descargar el reporte completo en Excel te pedimos tu correo y, de forma opcional, tu nombre, empresa, rol, país y WhatsApp. Los guardamos junto con el origen de la visita y la fecha, para poder escribirte sobre OBRALYT (mejoras, nuevas funciones, invitaciones a opinar y, cuando existan, planes de pago). Puedes pedir la baja en cualquier momento.",
+      "Mensajes que nos envías: si escribes a " + CORREO_CONTACTO + ", tratamos tu dirección de correo, tu nombre si lo indicas y el contenido del mensaje. El correo se gestiona con " + PROVEEDOR_CORREO + ".",
+      "No recogemos datos de pago y no vendemos, alquilamos ni compartimos datos personales con fines publicitarios.",
     ],
   },
   {
     t: "4. Para qué los usamos",
     p: [
-      "Para operar, mantener y proteger el sitio; para entender de forma agregada cómo se usa y mejorarlo; y para responder a tus mensajes. No tomamos decisiones automatizadas sobre ti ni usamos tus datos para publicidad.",
+      "Para operar, mantener y proteger el sitio; para entender cómo se usa y mejorarlo; para medir nuestras acciones de marketing; para responder a tus mensajes; y, si nos dejaste tu contacto, para escribirte sobre OBRALYT. No tomamos decisiones automatizadas sobre ti ni vendemos tus datos.",
     ],
   },
   {
     t: "5. Proveedores y transferencias internacionales",
     p: [
-      "Cloudflare, Inc. (alojamiento, seguridad, estadísticas y enrutamiento de correo), Google LLC (correo)" + (CON_UMAMI ? ", Umami (umami.is, estadísticas de navegación)" : "") + " actúan como proveedores de servicio y pueden procesar datos en Estados Unidos y en otros países. Cada uno aplica sus propias políticas de privacidad y medidas de seguridad. Si visitas el sitio desde fuera de Estados Unidos, entiendes que estos datos técnicos pueden procesarse allí.",
+      "Cloudflare, Inc. (alojamiento, seguridad, estadísticas, base de datos de medición y contactos, y enrutamiento de correo) y nuestro proveedor de correo (" + PROVEEDOR_CORREO + ") actúan como proveedores de servicio y pueden procesar datos en Estados Unidos y en otros países. Cada uno aplica sus propias políticas de privacidad y medidas de seguridad. Si visitas el sitio desde fuera de Estados Unidos, entiendes que estos datos técnicos pueden procesarse allí.",
       "Solo revelaremos datos a terceros si la ley nos obliga o para defender nuestros derechos o la seguridad del servicio.",
     ],
   },
   {
     t: "6. Cuánto tiempo los conservamos",
     p: [
-      "Los datos técnicos y estadísticos se conservan según los plazos de Cloudflare. Los correos se conservan mientras sean necesarios para atender tu consulta y por un máximo de 24 meses después del último intercambio, salvo que la ley exija conservarlos más tiempo o nos pidas borrarlos antes.",
+      "Los datos técnicos se conservan según los plazos de Cloudflare. Los registros de navegación se conservan hasta 24 meses. Los datos de contacto se conservan mientras OBRALYT esté activo o hasta que pidas su eliminación. Los correos se conservan mientras sean necesarios para atender tu consulta y por un máximo de 24 meses después del último intercambio, salvo que la ley exija conservarlos más tiempo o nos pidas borrarlos antes.",
     ],
   },
   {
@@ -68,7 +66,7 @@ const PRIVACIDAD = [
   {
     t: "8. Señales «Do Not Track»",
     p: [
-      "OBRALYT no rastrea a los visitantes a lo largo del tiempo ni entre sitios de terceros, por lo que no cambia su funcionamiento según la señal «Do Not Track» del navegador.",
+      "OBRALYT no rastrea a los visitantes entre visitas ni entre sitios de terceros: el identificador de la visita desaparece al cerrar la pestaña.",
     ],
   },
   {
