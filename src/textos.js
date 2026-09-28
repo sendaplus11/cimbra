@@ -147,7 +147,7 @@ export const LANDING = {
     },
     {
       p: "¿Qué formato debe tener mi archivo?",
-      r: "Excel (.xlsx o .xls) o CSV, en español o en inglés. OBRALYT busca automáticamente la columna con la descripción de la partida (descripción, partida, concepto, actividad o description) y la del monto (total, monto, importe o amount). Si el archivo trae cantidad y precio unitario pero no total, calcula el monto multiplicándolos. También reconoce la columna de código o ítem, los montos escritos como 1.234,56 o 1,234.56, los CSV con punto y coma, y busca el presupuesto en la hoja correcta si el libro tiene varias. Si el archivo trae capítulos con su subtotal (como los que exporta S10 u otros programas), los reconoce y no los suma dos veces; si trae precio unitario y parcial, comprueba cuál es el monto multiplicando cantidad por precio; y deja fuera los rubros de cierre (gastos generales, utilidad, IVA). Si no encuentra encabezados, deduce las columnas por su contenido y te avisa cuáles usó. Puedes descargar el archivo de ejemplo para ver el formato. Por ahora no se aceptan archivos PDF.",
+      r: "Excel (.xlsx o .xls) o CSV, en español o en inglés. OBRALYT busca automáticamente la columna con la descripción de la partida (descripción, partida, concepto, actividad o description) y la del monto (total, monto, importe o amount). Si el archivo trae cantidad y precio unitario pero no total, calcula el monto multiplicándolos. También reconoce la columna de código o ítem, los montos escritos como 1.234,56 o 1,234.56, los CSV con punto y coma, y busca el presupuesto en la hoja correcta si el libro tiene varias. Si el archivo trae capítulos con su subtotal (como los que exporta S10 u otros programas), los reconoce y no los suma dos veces; si trae precio unitario y parcial, comprueba cuál es el monto multiplicando cantidad por precio; y deja fuera los rubros de cierre (gastos generales, utilidad, IVA e impuestos). Lee montos en distintas monedas (dólares, euros, bolívares, soles, pesos y otras) sin que eso afecte el análisis: solo verifica que el monto total sea correcto. Si no encuentra encabezados, deduce las columnas por su contenido y te avisa cuáles usó. Puedes descargar el archivo de ejemplo para ver el formato. Por ahora no se aceptan archivos PDF.",
     },
     {
       p: "¿Mi presupuesto se envía a algún servidor?",
@@ -155,7 +155,7 @@ export const LANDING = {
     },
     {
       p: "¿Cómo sabe OBRALYT cuánto dura mi obra?",
-      r: "Tienes tres caminos. Puedes escribir la duración antes de subir el archivo (en semanas, meses o años). Si no lo haces, OBRALYT la busca en tu propio presupuesto: un plazo declarado («Plazo de ejecución: 120 días») o partidas que se pagan por tiempo durante toda la obra, como vigilancia, administración o ingeniero residente medidas en meses. Si el archivo no trae ninguna pista, usa un plazo provisional y te pide el real. Siempre te dice de dónde sacó el plazo y puedes cambiarlo.",
+      r: "Lo mejor es que lo escribas tú antes de subir el archivo (en semanas, meses o años): nadie conoce tu proyecto mejor que tú. Si no lo haces, OBRALYT intenta encontrar una pista en tu propio presupuesto (un plazo declarado o alguna partida que se paga por tiempo durante toda la obra); y si no encuentra ninguna, usa un plazo provisional. En cualquier caso, siempre puedes escribirlo o cambiarlo después en el módulo del Cronograma.",
     },
     {
       p: "¿OBRALYT me dice cuánto voy a ahorrar?",

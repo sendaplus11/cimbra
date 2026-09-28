@@ -30,6 +30,15 @@ function Texto({ children }) {
     );
 }
 
+// Ícono genérico de LinkedIn (glifo "in" en un cuadrado), usado en el enlace del fundador y el pie.
+function IconoLinkedIn({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="currentColor">
+      <path d="M4.98 3.5C4.98 4.88 3.87 6 2.5 6S0 4.88 0 3.5 1.11 1 2.48 1s2.5 1.12 2.5 2.5zM.22 8.24h4.5V23H.22V8.24zM8.5 8.24h4.31v2.01h.06c.6-1.13 2.06-2.32 4.24-2.32 4.54 0 5.38 2.99 5.38 6.88V23h-4.5v-6.86c0-1.64-.03-3.74-2.28-3.74-2.29 0-2.64 1.79-2.64 3.63V23H8.5V8.24z" />
+    </svg>
+  );
+}
+
 const btnCta =
   "inline-block bg-obralyt-amber text-white font-medium rounded-lg hover:opacity-90 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-obralyt-dark";
 const btnSecundario =
@@ -58,9 +67,10 @@ const clicProbar = (ubicacion) => () => registrarEvento("clic_probar", { ubicaci
 const SECCIONES_MEDIDAS = ["como-funciona", "video", "caso-real", "nucleo", "vista-previa", "herramienta", "complementarios", "que-es", "fundador", "preguntas", "cta-final"];
 
 // Menú de la página: lleva a cada bloque sin tener que desplazarse a ciegas.
+// "Cómo funciona" lleva directo al video (la explicación más rápida), sin pasos intermedios.
 const MENU = [
-  { href: "#como-funciona", texto: "Cómo funciona" },
-  { href: "#video", texto: "Video" },
+  { href: "#video", texto: "Cómo funciona" },
+  { href: "#vista-previa", texto: "Qué obtendrás" },
   { href: "#herramienta", texto: "Herramienta" },
   { href: "#que-es", texto: "Qué es" },
   { href: "#preguntas", texto: "Preguntas" },
@@ -150,9 +160,9 @@ export default function App() {
 
       {/* Video explicativo */}
       <section id="video" className="bg-[#F7F5F1] border-y border-gray-200 scroll-mt-14">
-        <div className="max-w-4xl mx-auto px-4 py-10">
+        <div className="max-w-4xl mx-auto px-4 py-7">
           <h2 className="text-xl font-semibold mb-1 text-center">Mira cómo funciona en un minuto</h2>
-          <p className="text-gray-500 text-sm text-center mb-5">Un recorrido real por la herramienta con un presupuesto de ejemplo: de subir el archivo al reporte en Excel.</p>
+          <p className="text-gray-500 text-sm text-center mb-4">Un recorrido real por la herramienta con un presupuesto de ejemplo: de subir el archivo al reporte en Excel.</p>
           <video className="w-full rounded-xl border border-gray-200 shadow-sm bg-white" controls playsInline preload="none"
             poster="/video/obralyt-como-funciona.jpg"
             onPlay={(e) => { if (!e.currentTarget.dataset.medido) { e.currentTarget.dataset.medido = "1"; registrarEvento("video_reproducido"); } }}
@@ -200,7 +210,7 @@ export default function App() {
       </section>
 
       {/* Qué obtendrás: captura real del resultado */}
-      <section id="vista-previa" className="bg-[#F7F5F1] border-y border-gray-200">
+      <section id="vista-previa" className="bg-[#F7F5F1] border-y border-gray-200 scroll-mt-14">
         <div className="max-w-5xl mx-auto px-4 py-10">
           <h2 className="text-xl font-semibold mb-1 text-center">{T.vistaTitulo}</h2>
           <p className="text-gray-500 text-sm text-center mb-6 max-w-2xl mx-auto">{T.vistaSubtitulo}</p>
@@ -272,9 +282,11 @@ export default function App() {
         <h2 className="text-lg font-semibold mb-2">{T.fundadorTitulo}</h2>
         <p className="text-sm text-gray-700 leading-relaxed">{T.fundadorTexto}</p>
         {LINKEDIN_URL && (
-          <p className="mt-3">
-            <a href={LINKEDIN_URL} target="_blank" rel="noopener noreferrer" onClick={() => registrarEvento("clic_linkedin")} className="text-obralyt-amber font-medium text-sm hover:underline">
-              {T.fundadorEnlace} →
+          <p className="mt-4">
+            <a href={LINKEDIN_URL} target="_blank" rel="noopener noreferrer" onClick={() => registrarEvento("clic_linkedin")}
+              className={btnSecundario + " inline-flex items-center gap-2 text-sm px-4 py-2"}>
+              <IconoLinkedIn className="w-4 h-4" />
+              {T.fundadorEnlace}
             </a>
           </p>
         )}
@@ -333,6 +345,15 @@ export default function App() {
             <>
               {" "}·{" "}
               <a href={"mailto:" + CORREO_CONTACTO} onClick={() => registrarEvento("clic_correo", { ubicacion: "pie" })} className="hover:text-obralyt-dark">{CORREO_CONTACTO}</a>
+            </>
+          )}
+          {LINKEDIN_URL && (
+            <>
+              {" "}·{" "}
+              <a href={LINKEDIN_URL} target="_blank" rel="noopener noreferrer" onClick={() => registrarEvento("clic_linkedin", { ubicacion: "pie" })}
+                aria-label="LinkedIn de OBRALYT" className="hover:text-obralyt-dark inline-flex items-center align-middle">
+                <IconoLinkedIn className="w-4 h-4" />
+              </a>
             </>
           )}
         </p>

@@ -32,7 +32,13 @@ export function parsearNumero(v) {
   if (/^\(.*\)$/.test(s)) { negativo = true; s = s.slice(1, -1); }
   if (/^-|-$/.test(s)) negativo = true;
   // Quita moneda, unidades y espacios (incluido el espacio duro y el de miles "1 234").
-  s = s.replace(/(bs\.?s?|bol[ií]vares|us\$|usd|eur|€|\$|d[oó]lares)/gi, "").replace(/[\s '’]/g, "").replace(/^[-+]|-$/g, "");
+  // Cubre simbolos y codigos usados en presupuestos de distintos paises (dolares, euros,
+  // bolivares, soles, pesos, quetzales, guaranies, colones, balboas, cordobas...).
+  s = s
+    .replace(/(us\$|u\$s|s\/\.?|r\$|c\$|rd\$|₡|₲|£|¥|€|\$|\bq(?=\.?\s*\d))/gi, "")
+    .replace(/\b(bs\.?s?|bol[ií]vares?|d[oó]lares?|usd|eur|euros?|gbp|libras?|soles?|pen|pesos?|peso|cop|mxn|ars|clp|dop|uyu|pyg|bob|quetzales?|gtq|c[oó]rdobas?|nio|colones?|crc|balboas?|pab|guaran[ií]es?|bs\.?f\.?)(?![a-zA-Z0-9])/gi, "")
+    .replace(/[\s '’]/g, "")
+    .replace(/^[-+]|-$/g, "");
   if (!/^[0-9.,]+$/.test(s) || !/[0-9]/.test(s)) return NaN;
   const tienePunto = s.includes(".");
   const tieneComa = s.includes(",");
@@ -552,7 +558,19 @@ export function leerPresupuesto(bytes) {
   mejor.moneda = /(^|[^a-zñ])bs\.?s?([^a-zñ]|$)|bol[ií]vares\b/i.test(textoLibro) ? "Bs. "
     : /US\$|\bUSD\b|\bd[oó]lares\b|\(\$\)|\$\s*\d/i.test(textoLibro) ? "$"
     : /S\/\.?|\bsoles\b|\bPEN\b/.test(textoLibro) ? "S/ "
-    : /€|\bEUR\b|\beuros?\b/i.test(textoLibro) ? "€ " : "";
+    : /€|\bEUR\b|\beuros?\b/i.test(textoLibro) ? "€ "
+    : /\bMXN\b|pesos?\s+mexicanos?/i.test(textoLibro) ? "MXN "
+    : /\bCOP\b|pesos?\s+colombianos?/i.test(textoLibro) ? "COP "
+    : /\bARS\b|pesos?\s+argentinos?/i.test(textoLibro) ? "ARS "
+    : /\bCLP\b|pesos?\s+chilenos?/i.test(textoLibro) ? "CLP "
+    : /\bDOP\b|RD\$/i.test(textoLibro) ? "RD$ "
+    : /\bGTQ\b|quetzales?/i.test(textoLibro) ? "Q "
+    : /\bBOB\b|bolivianos?/i.test(textoLibro) ? "Bs "
+    : /\bPYG\b|guaran[ií]es?/i.test(textoLibro) ? "₲ "
+    : /\bUYU\b/.test(textoLibro) ? "UYU "
+    : /\bCRC\b|colones?/i.test(textoLibro) ? "₡ "
+    : /\bPAB\b|balboas?/i.test(textoLibro) ? "B/. "
+    : /£|\bGBP\b|libras?\s+esterlinas?/i.test(textoLibro) ? "£ " : "";
   // Plazo de obra: se busca en todo el libro (carátula, condiciones) y en las partidas.
   mejor.plazoDetectado = detectarPlazo(mejor.partidas, textoLibro);
   delete mejor.textoContexto;
