@@ -911,7 +911,7 @@ export default function AnalisisPareto() {
       <div className="mb-4 bg-gray-50 p-3 rounded border border-gray-200">
         <div className="mb-3 pb-3 border-b border-gray-200">
           <label htmlFor="plazo-previo" className="text-xs font-medium text-gray-700 block mb-1">
-            1. ¿Cuánto durará la obra? <span className="font-normal text-gray-500">(opcional, pero hace el cronograma más preciso)</span>
+            1. ¿Cuánto durará la obra? <span className="font-normal text-gray-500">(recomendado: tu propia estimación, según tu presupuesto y experiencia)</span>
           </label>
           <div className="flex flex-wrap items-center gap-2">
             <input id="plazo-previo" type="number" min="0" step="any" inputMode="decimal" onWheel={(e) => e.currentTarget.blur()}
@@ -922,7 +922,7 @@ export default function AnalisisPareto() {
               <option value="meses">meses</option>
               <option value="años">años</option>
             </select>
-            <span className="text-xs text-gray-500">Si lo dejas vacío, OBRALYT lo busca en tu archivo (plazo declarado o partidas medidas en tiempo, como vigilancia o administración de obra).</span>
+            <span className="text-xs text-gray-500">Tú conoces tu proyecto mejor que nadie: úsalo para que el cronograma parta de tu estimación. Si lo dejas vacío, OBRALYT intenta encontrar una pista en tu archivo; de todas formas podrás editarlo después, en el módulo del Cronograma.</span>
           </div>
         </div>
         <label className="text-xs font-medium text-gray-700 block mb-1">2. Importa tu presupuesto de construcción (Excel, .xls o .csv)</label>
