@@ -167,7 +167,7 @@ export default function App() {
             poster="/video/obralyt-como-funciona.jpg"
             onPlay={(e) => { if (!e.currentTarget.dataset.medido) { e.currentTarget.dataset.medido = "1"; registrarEvento("video_reproducido"); } }}
             onEnded={() => registrarEvento("video_completado")}>
-            <source src="/video/obralyt-como-funciona.mp4" type="video/mp4" />
+            <source src="/video/obralyt-como-funciona.mp4?v=audio1" type="video/mp4" />
             Tu navegador no puede reproducir este video.
           </video>
           <p className="text-center mt-4">
@@ -263,6 +263,22 @@ export default function App() {
       <section id="que-es" className="max-w-5xl mx-auto px-4 py-10 scroll-mt-14">
         <h2 className="text-xl font-semibold mb-2 text-center">{T.quienesSomosTitulo}</h2>
         <p className="text-gray-600 text-sm text-center mb-6 max-w-2xl mx-auto">{T.problema}</p>
+
+        {/* Quién está detrás: primero, para que el enlace de LinkedIn se vea de inmediato al llegar a "Qué es" */}
+        <div id="fundador" className="max-w-3xl mx-auto text-center mb-8 pb-8 border-b border-gray-100">
+          <h3 className="text-base font-semibold mb-2">{T.fundadorTitulo}</h3>
+          <p className="text-sm text-gray-700 leading-relaxed">{T.fundadorTexto}</p>
+          {LINKEDIN_URL && (
+            <p className="mt-4">
+              <a href={LINKEDIN_URL} target="_blank" rel="noopener noreferrer" onClick={() => registrarEvento("clic_linkedin")}
+                className={btnSecundario + " inline-flex items-center gap-2 text-sm px-4 py-2"}>
+                <IconoLinkedIn className="w-4 h-4" />
+                {T.fundadorEnlace}
+              </a>
+            </p>
+          )}
+        </div>
+
         <div className="grid sm:grid-cols-2 gap-4">
           {T.bloques.map((b) => (
             <div key={b.titulo} className="bg-gray-50 border border-gray-100 rounded-xl p-4">
@@ -275,21 +291,6 @@ export default function App() {
             </div>
           ))}
         </div>
-      </section>
-
-      {/* Quién está detrás */}
-      <section id="fundador" className="max-w-3xl mx-auto px-4 pb-10 text-center">
-        <h2 className="text-lg font-semibold mb-2">{T.fundadorTitulo}</h2>
-        <p className="text-sm text-gray-700 leading-relaxed">{T.fundadorTexto}</p>
-        {LINKEDIN_URL && (
-          <p className="mt-4">
-            <a href={LINKEDIN_URL} target="_blank" rel="noopener noreferrer" onClick={() => registrarEvento("clic_linkedin")}
-              className={btnSecundario + " inline-flex items-center gap-2 text-sm px-4 py-2"}>
-              <IconoLinkedIn className="w-4 h-4" />
-              {T.fundadorEnlace}
-            </a>
-          </p>
-        )}
       </section>
 
       {/* Preguntas frecuentes */}
