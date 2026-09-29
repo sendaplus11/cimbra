@@ -201,6 +201,20 @@ export default function AnalisisPareto() {
   const fmt = (n) => moneda + fmtNum(n);
   const DIAS_POR = { semanas: 7, meses: 30, "años": 365 };
 
+  // Si el cliente escribe o cambia la duración en el paso 1 DESPUÉS de haber subido el archivo,
+  // el cronograma, el flujo de caja y la procura se recalculan al instante con ese plazo.
+  const aplicarPlazoPrevio = (valor, unidad) => {
+    if (!partidas.length) return;
+    const n = Number(String(valor).replace(",", "."));
+    if (!(n > 0)) return;
+    setPlazoTotal(Math.round(n * DIAS_POR[unidad]));
+    setFuentePlazo({ tipo: "previo" });
+    // Un plazo nuevo reparte de nuevo todas las fases: los ajustes manuales del plazo anterior ya no aplican.
+    setInicioManual({});
+    setDuracionManual({});
+    if (unidad !== "años") { setUnidadTiempo(unidad); setUnidadElegida(true); } else { setUnidadElegida(false); }
+  };
+
   const analizarBytes = (data, { ignorarPrevio = false } = {}) => {
     setImportError("");
     setImportInfo("");
@@ -443,10 +457,12 @@ export default function AnalisisPareto() {
   let cursorDia = 0;
   const cronograma = fasesOrdenadas.map((f, i) => {
     const pct = total ? f.monto / total : 0;
-    const diasAuto = Math.max(1, Math.round(duracionesBase[i] * escala));
+    // Sin redondeos intermedios: redondear cada fase a días enteros (y exigir mínimo 1 día) hacía que,
+    // con muchas fases, el cronograma se alargara muy por encima del plazo indicado.
+    const diasAuto = duracionesBase[i] * escala;
     const esManualDuracion = duracionManual[f.key] !== undefined;
     const dias = esManualDuracion ? Math.max(1, duracionManual[f.key]) : diasAuto;
-    const inicioAuto = Math.round(cursorDia);
+    const inicioAuto = cursorDia;
     const esManualInicio = inicioManual[f.key] !== undefined;
     const inicio = esManualInicio ? inicioManual[f.key] : inicioAuto;
     cursorDia = inicio + dias * factorSolape;
@@ -489,12 +505,13 @@ export default function AnalisisPareto() {
   const cronogramaDisplay = cronograma.map((f) => ({ ...f, inicio: aUnidad(f.inicio), dias: aUnidad(f.dias) }));
 
   function calcularFlujo(periodDays, label) {
-    const n = Math.max(1, Math.ceil(plazoTotal / periodDays));
+    const horizonte = Math.max(plazoTotal || 0, finDeObra);
+    const n = Math.max(1, Math.ceil(horizonte / periodDays - 1e-9));
     const filas = [];
     let acum = 0;
     for (let i = 0; i < n; i++) {
       const pStart = i * periodDays;
-      const pEnd = Math.min(plazoTotal, (i + 1) * periodDays);
+      const pEnd = Math.min(horizonte, (i + 1) * periodDays);
       let montoPeriodo = 0;
       cronograma.forEach((f) => {
         const dailyRate = f.dias > 0 ? f.monto / f.dias : 0;
@@ -916,8 +933,8 @@ export default function AnalisisPareto() {
           <div className="flex flex-wrap items-center gap-2">
             <input id="plazo-previo" type="number" min="0" step="any" inputMode="decimal" onWheel={(e) => e.currentTarget.blur()}
               className="w-24 border border-gray-300 rounded px-2 py-1 text-right bg-white" placeholder="Ej: 8"
-              value={plazoPrevio} onChange={(e) => setPlazoPrevio(e.target.value)} />
-            <select aria-label="Unidad del plazo" className="border border-gray-300 rounded px-1 py-1 text-xs bg-white" value={unidadPrevia} onChange={(e) => setUnidadPrevia(e.target.value)}>
+              value={plazoPrevio} onChange={(e) => { setPlazoPrevio(e.target.value); aplicarPlazoPrevio(e.target.value, unidadPrevia); }} />
+            <select aria-label="Unidad del plazo" className="border border-gray-300 rounded px-1 py-1 text-xs bg-white" value={unidadPrevia} onChange={(e) => { setUnidadPrevia(e.target.value); aplicarPlazoPrevio(plazoPrevio, e.target.value); }}>
               <option value="semanas">semanas</option>
               <option value="meses">meses</option>
               <option value="años">años</option>
@@ -1232,7 +1249,12 @@ export default function AnalisisPareto() {
           <div className="flex items-center gap-2">
             <label className="text-xs text-gray-500">Unidad</label>
             <select className="border border-gray-200 rounded px-1 py-0.5 text-xs" value={unidadEfectiva}
-              onChange={(e) => { setUnidadTiempo(e.target.value); setUnidadElegida(true); }}>
+              onChange={(e) => {
+                const u = e.target.value;
+                setUnidadTiempo(u); setUnidadElegida(true);
+                // El paso 1 sigue mostrando el mismo plazo, expresado en la nueva unidad.
+                if (plazoTotal && plazoPrevio !== "") { setPlazoPrevio(String(Math.round((plazoTotal / DIAS_POR[u]) * 10) / 10)); setUnidadPrevia(u); }
+              }}>
               <option value="semanas">Semanas</option>
               <option value="meses">Meses</option>
               <option value="años">Años</option>
@@ -1244,7 +1266,18 @@ export default function AnalisisPareto() {
               placeholder={unidadEfectiva === "semanas" ? "Ej: 36" : unidadEfectiva === "meses" ? "Ej: 8" : "Ej: 2"}
               step="any"
               value={plazoTotal === null ? "" : aUnidad(plazoTotal)}
-              onChange={(e) => { const raw = e.target.value; setPlazoTotal(raw === "" ? null : aDias(Number(raw))); setFuentePlazo(raw === "" ? null : { tipo: "usuario" }); }} />
+              onChange={(e) => {
+                const raw = e.target.value;
+                setPlazoTotal(raw === "" ? null : aDias(Number(raw)));
+                setFuentePlazo(raw === "" ? null : { tipo: "usuario" });
+                // Un único plazo para toda la herramienta: el paso 1 muestra el mismo valor.
+                setPlazoPrevio(raw);
+                setUnidadPrevia(unidadEfectiva);
+                setUnidadTiempo(unidadEfectiva);
+                setUnidadElegida(true);
+                setInicioManual({});
+                setDuracionManual({});
+              }} />
           </div>
         </div>
         {plazoEsProvisional && (
@@ -1261,7 +1294,7 @@ export default function AnalisisPareto() {
         )}
         {fuentePlazo && fuentePlazo.tipo === "previo" && (
           <p className="text-xs mb-3 px-2 py-1.5 rounded" style={{ background: "#ECFDF3", color: "#166534" }}>
-            Cronograma calculado con el plazo que indicaste antes de subir el archivo. Puedes ajustarlo arriba.
+            Cronograma calculado con el plazo que indicaste en el paso 1. Puedes ajustarlo arriba.
           </p>
         )}
         {plazoTotal !== null && plazoTotal > 0 && (
