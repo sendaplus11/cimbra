@@ -61,8 +61,21 @@ const PERIODICIDAD_LABEL = { semanas: "semanal", meses: "mensual", "años": "anu
 // Flujo de Caja y las Prioridades de Procura existen desde que se carga el archivo, y el
 // reporte en Excel sale completo. No pretende ser el plazo real: es un punto de partida.
 function plazoProvisional(nFases, hayCapitulos) {
-  const dias = hayCapitulos ? nFases * 30 : 180;
-  return Math.min(1800, Math.max(90, Math.round(dias / 30) * 30));
+  const dias = Math.min(1800, Math.max(90, Math.round((hayCapitulos ? nFases * 30 : 180) / 30) * 30));
+  // Las obras cortas se leen en semanas: se redondea a semanas enteras (26 semanas, no "25,7").
+  return dias <= 182 ? Math.round(dias / 7) * 7 : dias;
+}
+
+// Nombre de fase en el eje del Gantt: una sola línea, recortada, con el texto completo como ayuda.
+function TickFase({ x, y, payload, max = 30 }) {
+  const t = String((payload && payload.value) || "");
+  const corto = t.length > max ? t.slice(0, max - 1).trimEnd() + "…" : t;
+  return (
+    <g transform={"translate(" + x + "," + y + ")"}>
+      <title>{t}</title>
+      <text x={-4} y={0} dy={4} textAnchor="end" fontSize={11} fill="#4B5563">{corto}</text>
+    </g>
+  );
 }
 
 const MOSTRAR_CRITICAL_ACTIVITIES = false;
@@ -245,7 +258,9 @@ export default function AnalisisPareto() {
     } else if (res.plazoDetectado) {
       setPlazoTotal(res.plazoDetectado.dias);
       setFuentePlazo({ tipo: "archivo", ...res.plazoDetectado });
-      setUnidadElegida(false);
+      // Si el archivo dice "2,5 MESES", el cronograma se lee en meses (no "10,7 semanas").
+      const u = /\bmes(es)?\b/i.test(res.plazoDetectado.detalle) ? "meses" : /\bsemanas?\b/i.test(res.plazoDetectado.detalle) ? "semanas" : null;
+      if (u) { setUnidadTiempo(u); setUnidadElegida(true); } else { setUnidadElegida(false); }
       textoPlazo = " Plazo de obra tomado del archivo (" + res.plazoDetectado.detalle + ")" + (res.plazoDetectado.confianza === "alta" ? "." : "; confírmalo en el " + M.cronograma + ".");
     } else {
       setPlazoTotal(null);
@@ -502,6 +517,8 @@ export default function AnalisisPareto() {
   // "desde la semana 3", "desde el mes 1", "desde el año 2"
   const desdeMomento = (dia) => (unidadEfectiva === "semanas" ? "la " : "el ") + momentoDeDia(dia);
   const plazoTexto = (dias) => aUnidad(dias).toLocaleString("es") + " " + unidadLabel;
+  // En el celular el nombre de la fase ocupa menos, para dejar espacio a las barras.
+  const ejeGanttAncho = typeof window !== "undefined" && window.innerWidth < 640 ? 118 : 215;
   const cronogramaDisplay = cronograma.map((f) => ({ ...f, inicio: aUnidad(f.inicio), dias: aUnidad(f.dias) }));
 
   function calcularFlujo(periodDays, label) {
@@ -1318,11 +1335,13 @@ export default function AnalisisPareto() {
                 </span>
               )}
             </div>
-            <ResponsiveContainer width="100%" height={cronograma.length * (cronograma.length > 25 ? 18 : 40) + 40}>
+            {/* Con muchas fases cada fila necesita su espacio y el nombre va en una sola línea
+                (recortado; el nombre completo aparece al pasar el cursor), para que no se encimen. */}
+            <ResponsiveContainer width="100%" height={cronograma.length * (cronograma.length > 25 ? 22 : 40) + 40}>
               <BarChart data={cronogramaDisplay} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis type="number" domain={[0, aUnidad(domainMax)]} tick={{ fontSize: 11 }} label={{ value: unidadLabel, position: "insideBottom", offset: -2, fontSize: 11 }} />
-                <YAxis type="category" dataKey="name" width={190} tick={{ fontSize: 11 }} />
+                <YAxis type="category" dataKey="name" width={ejeGanttAncho} interval={0} tick={<TickFase max={Math.floor((ejeGanttAncho - 12) / 6.6)} />} />
                 <Tooltip formatter={(v, n) => (n === "dias" ? v + " " + unidadLabel : null)} labelFormatter={(l) => l} />
                 <Bar dataKey="inicio" stackId="g" fill="transparent" />
                 <Bar dataKey="dias" stackId="g" fill="#3A5A73" radius={[0, 4, 4, 0]} />

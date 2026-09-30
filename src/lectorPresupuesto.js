@@ -557,7 +557,9 @@ export function leerPresupuesto(bytes) {
   }
   mejor.moneda = /(^|[^a-zñ])bs\.?s?([^a-zñ]|$)|bol[ií]vares\b/i.test(textoLibro) ? "Bs. "
     : /US\$|\bUSD\b|\bd[oó]lares\b|\(\$\)|\$\s*\d/i.test(textoLibro) ? "$"
-    : /S\/\.?|\bsoles\b|\bPEN\b/.test(textoLibro) ? "S/ "
+    // "S/" solo como símbolo de soles (S/ 100, S/. 100, "S/." en un formato), no dentro de textos
+    // como "S/NORMA", "LITROS/DÍA" o "PLUS/DOLBY", comunes en las descripciones de partidas.
+    : /(^|[^A-Za-zÁÉÍÓÚÑáéíóúñ0-9/])S\/\.?(?=\s*"?\s*[\d#]|\s*$)|\bsoles\b|\bPEN\b/m.test(textoLibro) ? "S/ "
     : /€|\bEUR\b|\beuros?\b/i.test(textoLibro) ? "€ "
     : /\bMXN\b|pesos?\s+mexicanos?/i.test(textoLibro) ? "MXN "
     : /\bCOP\b|pesos?\s+colombianos?/i.test(textoLibro) ? "COP "
