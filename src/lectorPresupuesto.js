@@ -35,7 +35,7 @@ export function parsearNumero(v) {
   // Cubre simbolos y codigos usados en presupuestos de distintos paises (dolares, euros,
   // bolivares, soles, pesos, quetzales, guaranies, colones, balboas, cordobas...).
   s = s
-    .replace(/(us\$|u\$s|s\/\.?|r\$|c\$|rd\$|₡|₲|£|¥|€|\$|\bq(?=\.?\s*\d))/gi, "")
+    .replace(/(us\$|u\$s|s\/\.?|r\$|c\$|rd\$|₡|₲|£|¥|€|\$|\bb\/\.?(?=\s*\d)|\bq(?=\.?\s*\d))/gi, "")
     .replace(/\b(bs\.?s?|bol[ií]vares?|d[oó]lares?|usd|eur|euros?|gbp|libras?|soles?|pen|pesos?|peso|cop|mxn|ars|clp|dop|uyu|pyg|bob|quetzales?|gtq|c[oó]rdobas?|nio|colones?|crc|balboas?|pab|guaran[ií]es?|bs\.?f\.?)(?![a-zA-Z0-9])/gi, "")
     .replace(/[\s '’]/g, "")
     .replace(/^[-+]|-$/g, "");
@@ -245,9 +245,9 @@ const FILA_DE_TOTAL = /^\s*(i\.?v\.?a\b|i\.?g\.?v\b|impuesto|sub-?total|total\b|
 // Líneas que suelen ser ajustes financieros y no trabajos de obra: se avisan, no se excluyen.
 const LINEA_DE_AJUSTE = /variaci[oó]n de precios|escalaci[oó]n|imprevistos|reajuste de precios|contingencias?\b|contingency|escalation|price adjustment|incremento por modificaci|aumento de costos|ajuste por inflaci/i;
 // Rubros de cierre del presupuesto (se calculan como % del costo directo): no son partidas de obra.
-const RUBRO_DE_CIERRE = /^\s*(total\s+)?(costo|costos)\s+(directo|indirecto)s?\b|^\s*gastos?\s+generales\b|^\s*utilidad(es)?\b|^\s*a\.?\s?i\.?\s?u\b|^\s*administraci[oó]n,?\s+imprevistos|^\s*overhead\b|^\s*profit\b|^\s*financiamiento\b|^\s*(fianzas?|p[oó]lizas?)\s+y\b/i;
+const RUBRO_DE_CIERRE = /^\s*(total\s+)?(costo|costos)\s+(directo|indirecto)s?\b|^\s*gastos?\s+generales\b|^\s*utilidad(es)?\b|^\s*a\.?\s?i\.?\s?u\b|^\s*administraci[oó]n,?\s+imprevistos|^\s*overhead\b|^\s*profit\b|^\s*financiamiento\b|^\s*(fianzas?|p[oó]lizas?)\s+y\b|^\s*beneficios?\b|^\s*indirectos?\b|^\s*cargos?\s+adicionales\b|^\s*honorarios\b/i;
 // A partir de estas filas, lo que sigue es el cierre del presupuesto (totales, impuestos, % de ley).
-const FIN_DE_PARTIDAS = /^\s*(total\s+)?costo\s+directo\b|^\s*total\s+(general|presupuesto|de\s+la\s+obra|obra|del\s+presupuesto)\b|^\s*presupuesto\s+total\b|^\s*grand\s+total\b|^\s*monto\s+total\s+(de\s+la\s+)?(obra|oferta|presupuesto)\b/i;
+const FIN_DE_PARTIDAS = /^\s*(total\s+)?costo\s+(directo|neto)\b|^\s*total\s+(general|presupuesto|de\s+la\s+obra|obra|del\s+presupuesto)\b|^\s*presupuesto\s+total\b|^\s*grand\s+total\b|^\s*monto\s+total\s+(de\s+la\s+)?(obra|oferta|presupuesto)\b/i;
 
 // ---------------------------------------------------------------- plazo de obra
 
@@ -264,7 +264,7 @@ function diasDeUnidad(u) {
 const PARTIDA_DE_PLAZO = /vigilan|seguridad de obra|guardian|celador|administraci[oó]n de (la )?obra|residen|direcci[oó]n (t[eé]cnica|de obra)|supervisi|inspecci[oó]n|gerencia de (obra|proyecto)|ingenier[oa] (residente|de obra)|maestro de obra|capataz|personal t[eé]cnico|campamento|caseta|obrador|oficina de obra|mantenimiento de (instalaciones|campamento|caseta|obrador)|ba[nñ]os? (port[aá]til|qu[ií]mic)|sanitarios? port[aá]til|servicios? (b[aá]sicos|provisionales)|plazo|duraci[oó]n|site (supervision|management|security)|project management|superintend|site office|temporary facilities|welfare/i;
 
 // Busca "plazo de ejecución: 120 días", "Plazo contractual 18 meses", "duration: 10 weeks"…
-const PLAZO_EN_TEXTO = /(plazo(?:\s+(?:de\s+)?(?:ejecuci[oó]n|obra|contractual|total|de\s+la\s+obra|estimado|previsto))?|duraci[oó]n(?:\s+de\s+(?:la\s+)?obra)?|tiempo\s+de\s+ejecuci[oó]n|duration|construction\s+period|contract\s+period|completion\s+time)\s*[:=]?\s*(?:de\s+)?(\d+(?:[.,]\d+)?)\s*(d[ií]as?(?:\s+(?:calendario|continuos|h[aá]biles|laborables))?|days?|semanas?|weeks?|meses|mes|months?|a[nñ]os?|years?)/i;
+const PLAZO_EN_TEXTO = /(plazo(?:\s+(?:de\s+)?(?:ejecuci[oó]n|obra|contractual|total|de\s+la\s+obra|estimado|previsto))?|duraci[oó]n(?:\s+de\s+(?:la\s+)?obra)?|tiempo\s+(?:estimado\s+)?de\s+(?:ejecuci[oó]n|construcci[oó]n|obra)|per[ií]odo\s+de\s+(?:ejecuci[oó]n|construcci[oó]n)|plazo\s+de\s+construcci[oó]n|duration|construction\s+period|contract\s+period|completion\s+time)\s*[:=]?\s*(?:de\s+)?(\d+(?:[.,]\d+)?)\s*(d[ií]as?(?:\s+(?:calendario|continuos|h[aá]biles|laborables))?|days?|semanas?|weeks?|meses|mes|months?|a[nñ]os?|years?)/i;
 
 function plazoDeTexto(texto) {
   const m = PLAZO_EN_TEXTO.exec(texto || "");

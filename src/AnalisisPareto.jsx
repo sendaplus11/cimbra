@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { ComposedChart, BarChart, Bar, Cell, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer } from "recharts";
 import * as XLSX from "xlsx-js-style";
 import { MODULOS as M } from "./textos.js";
@@ -228,11 +228,17 @@ export default function AnalisisPareto() {
     if (unidad !== "años") { setUnidadTiempo(unidad); setUnidadElegida(true); } else { setUnidadElegida(false); }
   };
 
-  const analizarBytes = (data, { ignorarPrevio = false } = {}) => {
+  // Medición del uso: solo el tipo de archivo (xlsx/xls/csv), el resultado y el tiempo. Nunca su contenido ni su nombre.
+  const [analisisN, setAnalisisN] = useState(0);
+  const propios = useRef(0);
+  const analizarBytes = (data, { ignorarPrevio = false, tipo = "otro" } = {}) => {
     setImportError("");
     setImportInfo("");
-    const res = leerPresupuesto(data);
+    const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
+    let res;
+    try { res = leerPresupuesto(data); } catch (e) { res = { error: "No se pudo leer el archivo." }; }
     if (res.error) {
+      registrarEvento("analisis_fallido", { tipo, origen: ignorarPrevio ? "ejemplo" : "archivo" });
       setImportError(res.error);
       return;
     }
@@ -268,6 +274,13 @@ export default function AnalisisPareto() {
       setUnidadElegida(false);
       textoPlazo = " El archivo no indica el plazo de la obra: escríbelo en el " + M.cronograma + " para que el cronograma y el flujo de caja reflejen tu proyecto.";
     }
+    const tms = Math.round((typeof performance !== "undefined" ? performance.now() : Date.now()) - t0);
+    registrarEvento("analisis_completado", { tipo, origen: ignorarPrevio ? "ejemplo" : "archivo", ms: tms });
+    if (!ignorarPrevio) {
+      propios.current += 1;
+      if (propios.current === 2) registrarEvento("segundo_analisis", { tipo });
+    }
+    setAnalisisN((n) => n + 1);
     const totalCategorias = new Set(nuevas.map((p) => p.categoria).filter(Boolean)).size;
     const ajustes = nuevas.filter((p) => p.esAjuste);
     setImportInfo(
@@ -286,6 +299,21 @@ export default function AnalisisPareto() {
     );
   };
 
+  // "Resultado visto": el visitante llegó a ver la primera sección de resultados tras cada análisis.
+  useEffect(() => {
+    if (!analisisN || typeof IntersectionObserver === "undefined") return undefined;
+    let obs = null;
+    const t = setTimeout(() => {
+      const el = document.getElementById("res-cost-drivers");
+      if (!el) return;
+      obs = new IntersectionObserver((es) => {
+        if (es.some((x) => x.isIntersecting)) { registrarEvento("resultado_visto", { n: analisisN }); obs.disconnect(); }
+      }, { threshold: 0, rootMargin: "0px 0px -30% 0px" });
+      obs.observe(el);
+    }, 400);
+    return () => { clearTimeout(t); if (obs) obs.disconnect(); };
+  }, [analisisN]);
+
   const handleFile = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -294,10 +322,13 @@ export default function AnalisisPareto() {
     setEsEjemplo(false);
     setNombreArchivo(file.name);
     // Medición: solo se registra que se cargó un archivo, nunca su nombre ni su contenido.
-    registrarEvento("presupuesto_cargado", { plazo_previo: plazoPrevio ? "si" : "no" });
+    const ext = (file.name.split(".").pop() || "").toLowerCase();
+    const tipo = ["xlsx", "xls", "csv"].includes(ext) ? ext : "otro";
+    registrarEvento("presupuesto_cargado", { plazo_previo: plazoPrevio ? "si" : "no", tipo });
     e.target.value = ""; // permite volver a elegir el mismo archivo
     const reader = new FileReader();
-    reader.onload = (evt) => analizarBytes(new Uint8Array(evt.target.result));
+    reader.onload = (evt) => analizarBytes(new Uint8Array(evt.target.result), { tipo });
+    reader.onerror = () => registrarEvento("analisis_fallido", { tipo, origen: "lectura" });
     reader.readAsArrayBuffer(file);
   };
 
@@ -314,7 +345,7 @@ export default function AnalisisPareto() {
     registrarEvento("ejemplo_cargado");
     const bytes = XLSX.write(libroDeEjemplo(), { type: "array", bookType: "xlsx" });
     // El ejemplo trae su propio plazo (vigilancia de obra, 12 meses): se lee igual que un archivo real.
-    analizarBytes(new Uint8Array(bytes), { ignorarPrevio: true });
+    analizarBytes(new Uint8Array(bytes), { ignorarPrevio: true, tipo: "ejemplo" });
     setEsEjemplo(true);
   };
   const descargarEjemplo = () => {
@@ -466,7 +497,8 @@ export default function AnalisisPareto() {
     cursorProv = ini + d * factorSolape;
     return { ini, d };
   });
-  const spanProv = provisional.length ? provisional[provisional.length - 1].ini + provisional[provisional.length - 1].d : 0;
+  // El fin del cronograma es el de la fase que termina más tarde (no siempre la última: un capítulo grande al inicio puede terminar después).
+  const spanProv = provisional.length ? Math.max(...provisional.map((x) => x.ini + x.d)) : 0;
   const escala = plazoTotal && spanProv > 0 ? plazoTotal / spanProv : 1;
 
   let cursorDia = 0;
