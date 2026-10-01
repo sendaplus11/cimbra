@@ -15,6 +15,10 @@ const PASOS_EMBUDO = [
 
 const NOMBRES_EVENTO = {
   visita: "Visita",
+  analisis_completado: "Completó un análisis",
+  analisis_fallido: "Un análisis falló",
+  segundo_analisis: "Hizo un segundo análisis",
+  resultado_visto: "Vio los resultados",
   seccion_vista: "Vio una sección",
   ejemplo_cargado: "Usó el presupuesto de ejemplo",
   presupuesto_cargado: "Subió su presupuesto",
@@ -189,6 +193,7 @@ export default function Panel() {
             <div className="grid md:grid-cols-2 gap-4 mb-6">
               <Tabla titulo="Visitas por día" filas={datos.porDia} col1="dia" />
               <Tabla titulo="De dónde llegan" filas={datos.fuentes} col1="fuente" />
+              <Tabla titulo="Activaciones por canal (completaron el análisis de su propio archivo)" filas={datos.activaciones || []} col1="fuente" />
               <Tabla titulo="Hasta dónde leen (secciones vistas)" filas={datos.secciones} col1="seccion" />
               <Tabla titulo="Países" filas={datos.paises} col1="pais" />
               <Tabla titulo="Dispositivos" filas={datos.dispositivos} col1="dispositivo" />
