@@ -18,7 +18,8 @@ export async function asegurarEsquema(db) {
       referencia TEXT,
       utm_source TEXT,
       utm_medium TEXT,
-      utm_campaign TEXT
+      utm_campaign TEXT,
+      utm_content TEXT
     )`),
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_eventos_creado ON eventos(creado)`),
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_eventos_sesion ON eventos(sesion)`),
@@ -38,12 +39,20 @@ export async function asegurarEsquema(db) {
       utm_source TEXT,
       utm_medium TEXT,
       utm_campaign TEXT,
+      utm_content TEXT,
       acepta_comunicaciones INTEGER NOT NULL DEFAULT 0,
       estado TEXT NOT NULL DEFAULT 'nuevo',
       notas TEXT
     )`),
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_leads_correo ON leads(correo)`),
   ]);
+  // Migración: las tablas creadas antes de medir utm_content no tienen esa columna.
+  for (const tabla of ["eventos", "leads"]) {
+    const { results } = await db.prepare(`PRAGMA table_info(${tabla})`).all();
+    if (!(results || []).some((c) => c.name === "utm_content")) {
+      await db.prepare(`ALTER TABLE ${tabla} ADD COLUMN utm_content TEXT`).run();
+    }
+  }
   esquemaListo = true;
 }
 

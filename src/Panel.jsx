@@ -180,7 +180,7 @@ export default function Panel() {
                           <td className="py-1.5 pr-3">{l.cargo}</td>
                           <td className="py-1.5 pr-3">{l.pais || l.pais_ip}</td>
                           <td className="py-1.5 pr-3 whitespace-nowrap">{l.telefono && <a className="underline" href={"https://wa.me/" + l.telefono.replace(/\D/g, "")} target="_blank" rel="noopener noreferrer">{l.telefono}</a>}</td>
-                          <td className="py-1.5 pr-3">{l.utm_source || l.referencia || "directo"}{l.utm_campaign ? " · " + l.utm_campaign : ""}</td>
+                          <td className="py-1.5 pr-3">{l.utm_source || l.referencia || "directo"}{l.utm_campaign ? " · " + l.utm_campaign : ""}{l.utm_content ? " · " + l.utm_content : ""}</td>
                           <td className="py-1.5 pr-3">{l.origen}</td>
                         </tr>
                       ))}
@@ -194,6 +194,8 @@ export default function Panel() {
               <Tabla titulo="Visitas por día" filas={datos.porDia} col1="dia" />
               <Tabla titulo="De dónde llegan" filas={datos.fuentes} col1="fuente" />
               <Tabla titulo="Activaciones por canal (completaron el análisis de su propio archivo)" filas={datos.activaciones || []} col1="fuente" />
+              <Tabla titulo="Visitas por pieza de contenido (utm_content)" filas={datos.porContenido || []} col1="pieza" />
+              <Tabla titulo="Activaciones por pieza de contenido" filas={datos.activacionesPorContenido || []} col1="pieza" />
               <Tabla titulo="Hasta dónde leen (secciones vistas)" filas={datos.secciones} col1="seccion" />
               <Tabla titulo="Países" filas={datos.paises} col1="pais" />
               <Tabla titulo="Dispositivos" filas={datos.dispositivos} col1="dispositivo" />

@@ -26,7 +26,7 @@ export async function onRequestPost({ request, env }) {
   await asegurarEsquema(env.DB);
   const ahora = new Date().toISOString();
   const stmt = env.DB.prepare(
-    "INSERT INTO eventos (creado, sesion, nombre, datos, pais, dispositivo, referencia, utm_source, utm_medium, utm_campaign) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    "INSERT INTO eventos (creado, sesion, nombre, datos, pais, dispositivo, referencia, utm_source, utm_medium, utm_campaign, utm_content) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
   );
   const lote = [];
   for (const ev of eventos) {
@@ -40,7 +40,7 @@ export async function onRequestPost({ request, env }) {
       }
       datos = Object.keys(d).length ? JSON.stringify(d) : null;
     }
-    lote.push(stmt.bind(ahora, sesion, nombre, datos, pais, disp, ref, limpio(utm.source, 60), limpio(utm.medium, 60), limpio(utm.campaign, 80)));
+    lote.push(stmt.bind(ahora, sesion, nombre, datos, pais, disp, ref, limpio(utm.source, 60), limpio(utm.medium, 60), limpio(utm.campaign, 80), limpio(utm.content, 80)));
   }
   if (lote.length) await env.DB.batch(lote);
   return json({ ok: true, guardados: lote.length });

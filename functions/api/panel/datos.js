@@ -25,7 +25,7 @@ export async function onRequestGet({ request, env }) {
   const db = env.DB;
   const q = (sql, ...args) => db.prepare(sql).bind(...args).all().then((r) => r.results || []);
 
-  const [leads, embudo, porDia, fuentes, paises, dispositivos, secciones, preguntas, botones, activaciones] = await Promise.all([
+  const [leads, embudo, porDia, fuentes, paises, dispositivos, secciones, preguntas, botones, activaciones, porContenido, activacionesPorContenido] = await Promise.all([
     q("SELECT * FROM leads ORDER BY creado DESC LIMIT 1000"),
     q("SELECT nombre, COUNT(DISTINCT sesion) AS sesiones, COUNT(*) AS veces FROM eventos WHERE creado >= ? GROUP BY nombre ORDER BY sesiones DESC", desde),
     q("SELECT substr(creado,1,10) AS dia, COUNT(DISTINCT sesion) AS sesiones FROM eventos WHERE creado >= ? GROUP BY dia ORDER BY dia", desde),
@@ -40,6 +40,12 @@ export async function onRequestGet({ request, env }) {
     q(`SELECT COALESCE(NULLIF(utm_source,''), CASE WHEN referencia IS NULL OR referencia = '' THEN 'directo' ELSE referencia END) AS fuente,
        COUNT(DISTINCT sesion) AS sesiones FROM eventos WHERE creado >= ? AND nombre = 'analisis_completado' AND json_extract(datos,'$.origen') = 'archivo'
        GROUP BY fuente ORDER BY sesiones DESC LIMIT 25`, desde),
+    // Por pieza de contenido (utm_content): qué video o post concreto trae visitas y activaciones.
+    q(`SELECT COALESCE(NULLIF(utm_source,''),'?') || ' · ' || utm_content AS pieza, COUNT(DISTINCT sesion) AS sesiones
+       FROM eventos WHERE creado >= ? AND nombre = 'visita' AND COALESCE(utm_content,'') <> '' GROUP BY pieza ORDER BY sesiones DESC LIMIT 25`, desde),
+    q(`SELECT COALESCE(NULLIF(utm_source,''),'?') || ' · ' || utm_content AS pieza, COUNT(DISTINCT sesion) AS sesiones
+       FROM eventos WHERE creado >= ? AND nombre = 'analisis_completado' AND json_extract(datos,'$.origen') = 'archivo' AND COALESCE(utm_content,'') <> ''
+       GROUP BY pieza ORDER BY sesiones DESC LIMIT 25`, desde),
   ]);
-  return json({ ok: true, dias, leads, embudo, porDia, fuentes, paises, dispositivos, secciones, preguntas, botones, activaciones });
+  return json({ ok: true, dias, leads, embudo, porDia, fuentes, paises, dispositivos, secciones, preguntas, botones, activaciones, porContenido, activacionesPorContenido });
 }

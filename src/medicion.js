@@ -55,7 +55,7 @@ export function contextoVisita() {
     }
   } catch (e) { /* sin referencia */ }
   const p = new URLSearchParams(window.location.search);
-  const utm = { source: p.get("utm_source") || "", medium: p.get("utm_medium") || "", campaign: p.get("utm_campaign") || "" };
+  const utm = { source: p.get("utm_source") || "", medium: p.get("utm_medium") || "", campaign: p.get("utm_campaign") || "", content: p.get("utm_content") || "" };
   contexto = { referencia, utm };
   return contexto;
 }
