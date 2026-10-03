@@ -2,3 +2,13 @@
 /privacidad /#/privacidad 301
 /terminos.html /#/terminos 301
 /terminos /#/terminos 301
+
+# Enlaces cortos para redes sociales (302 para poder cambiarlos sin caché del navegador).
+# Con sufijo, el sufijo se guarda como utm_content: obralyt.com/yt/557-partidas
+/in/*     /?utm_source=linkedin&utm_medium=social&utm_content=:splat 302
+/in       /?utm_source=linkedin&utm_medium=social 302
+/empresa  /?utm_source=linkedin&utm_medium=empresa 302
+/ig/*     /?utm_source=instagram&utm_medium=social&utm_content=:splat 302
+/ig       /?utm_source=instagram&utm_medium=bio 302
+/yt/*     /?utm_source=youtube&utm_medium=video&utm_content=:splat 302
+/yt       /?utm_source=youtube&utm_medium=canal 302

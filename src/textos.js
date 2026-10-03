@@ -29,6 +29,13 @@ export const CORREO_CONTACTO = "contacto@obralyt.com";
 // Perfil profesional del fundador (se muestra en "Quién está detrás"). Mientras esté vacío, no se muestra el enlace.
 export const LINKEDIN_URL = "https://www.linkedin.com/in/carlos-magallanes-construction";
 
+// Redes de OBRALYT (pie de página). Una red con URL vacía no se muestra.
+export const REDES = [
+  { red: "linkedin", nombre: "LinkedIn", url: "https://www.linkedin.com/company/obralyt" },
+  { red: "instagram", nombre: "Instagram", url: "https://www.instagram.com/obralyt/" },
+  { red: "youtube", nombre: "YouTube", url: "https://www.youtube.com/@obralyt" },
+];
+
 export const LANDING = {
   cta: "Probar gratis",
   etiqueta: "Inteligencia de costos",

@@ -6,7 +6,7 @@ import { iniciarMedicion, registrarEvento, observarSecciones } from "./medicion.
 import logoHero from "./assets/obralyt-web-hero.svg";
 import logoHeader from "./assets/obralyt-web-header.svg";
 import vistaEjemplo from "./assets/ejemplo-resultado.jpg";
-import { LANDING as T, WHATSAPP_NUMERO, WHATSAPP_MENSAJE, CORREO_CONTACTO, LINKEDIN_URL } from "./textos.js";
+import { LANDING as T, WHATSAPP_NUMERO, WHATSAPP_MENSAJE, CORREO_CONTACTO, LINKEDIN_URL, REDES } from "./textos.js";
 
 const YEAR = new Date().getFullYear();
 const whatsappUrl = WHATSAPP_NUMERO
@@ -38,6 +38,25 @@ function IconoLinkedIn({ className }) {
     </svg>
   );
 }
+
+// Íconos genéricos para Instagram (cámara) y YouTube (botón de reproducir); van siempre con el nombre de la red.
+function IconoCamara({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" />
+      <circle cx="12" cy="13.5" r="3.5" />
+    </svg>
+  );
+}
+function IconoReproducir({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9.5" />
+      <path d="M10 8.5v7l6-3.5-6-3.5z" fill="currentColor" />
+    </svg>
+  );
+}
+const ICONOS_RED = { linkedin: IconoLinkedIn, instagram: IconoCamara, youtube: IconoReproducir };
 
 const btnCta =
   "inline-block bg-obralyt-amber text-white font-medium rounded-lg hover:opacity-90 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-obralyt-dark";
@@ -348,16 +367,22 @@ export default function App() {
               <a href={"mailto:" + CORREO_CONTACTO} onClick={() => registrarEvento("clic_correo", { ubicacion: "pie" })} className="hover:text-obralyt-dark">{CORREO_CONTACTO}</a>
             </>
           )}
-          {LINKEDIN_URL && (
-            <>
-              {" "}·{" "}
-              <a href={LINKEDIN_URL} target="_blank" rel="noopener noreferrer" onClick={() => registrarEvento("clic_linkedin", { ubicacion: "pie" })}
-                aria-label="LinkedIn de OBRALYT" className="hover:text-obralyt-dark inline-flex items-center align-middle">
-                <IconoLinkedIn className="w-4 h-4" />
-              </a>
-            </>
-          )}
         </p>
+        {REDES.some((r) => r.url) && (
+          <nav aria-label="Redes de OBRALYT" className="mt-3 flex flex-wrap justify-center gap-x-5 gap-y-2">
+            {REDES.filter((r) => r.url).map((r) => {
+              const Icono = ICONOS_RED[r.red];
+              return (
+                <a key={r.red} href={r.url} target="_blank" rel="noopener noreferrer"
+                  onClick={() => registrarEvento("clic_" + r.red, { ubicacion: "pie" })}
+                  className="inline-flex items-center gap-1.5 text-gray-500 hover:text-obralyt-dark">
+                  {Icono && <Icono className="w-4 h-4" />}
+                  <span>{r.nombre}</span>
+                </a>
+              );
+            })}
+          </nav>
+        )}
         <p className="mt-1">OBRALYT · {YEAR}</p>
       </footer>
     </div>
