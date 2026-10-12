@@ -24,9 +24,48 @@ let contexto = null;
 function activo() {
   if (typeof window === "undefined") return false;
   if (!DOMINIOS_MEDIDOS.test(window.location.hostname) && !/[?&]medir=1/.test(window.location.search)) return false; // no mide pruebas locales
-  // El navegador de quien administra OBRALYT (entró al panel) no se mide.
-  try { if (localStorage.getItem("obralyt_no_medir")) return false; } catch (e) { /* sin almacenamiento */ }
   return true;
+}
+
+// Modo interno: las visitas del equipo (Carlos, Jacob) y sus pruebas NO cuentan en las estadísticas.
+// Sus eventos se guardan aparte (tabla eventos_excluidos) para poder verificar enlaces sin ensuciar los datos.
+//   obralyt.com/?interno=activar     → este navegador queda marcado como del equipo (permanente)
+//   obralyt.com/?interno=1           → solo esta pestaña/sesión es una prueba
+//   obralyt.com/?interno=desactivar  → quita la marca
+// El navegador de quien entra al panel privado también queda marcado (obralyt_no_medir).
+let interno = null;
+export function modoInterno() {
+  if (interno !== null) return interno;
+  interno = "";
+  if (typeof window === "undefined") return interno;
+  try {
+    const p = new URLSearchParams(window.location.search);
+    const orden = (p.get("interno") || "").toLowerCase();
+    if (orden === "activar") localStorage.setItem("obralyt_no_medir", "1");
+    else if (orden === "desactivar") { localStorage.removeItem("obralyt_no_medir"); sessionStorage.removeItem("obralyt_interno"); }
+    else if (orden === "1" || orden === "prueba") sessionStorage.setItem("obralyt_interno", "1");
+    if (localStorage.getItem("obralyt_no_medir")) interno = "equipo";
+    else if (sessionStorage.getItem("obralyt_interno")) interno = "prueba";
+  } catch (e) { /* sin almacenamiento */ }
+  return interno;
+}
+
+// Quita ?interno=... de la barra de direcciones (después de leer los UTM) y muestra un aviso discreto.
+function prepararModoInterno() {
+  try {
+    contextoVisita();
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("interno")) {
+      url.searchParams.delete("interno");
+      window.history.replaceState(window.history.state, "", url.pathname + (url.searchParams.toString() ? "?" + url.searchParams.toString() : "") + url.hash);
+    }
+    if (!modoInterno()) return;
+    const aviso = document.createElement("div");
+    aviso.textContent = modoInterno() === "equipo" ? "Modo interno · no cuenta en estadísticas" : "Prueba interna · no cuenta en estadísticas";
+    aviso.setAttribute("aria-hidden", "true");
+    aviso.style.cssText = "position:fixed;left:8px;bottom:8px;z-index:2147483647;background:#1C2B39;color:#fff;font:600 11px/1.2 system-ui,sans-serif;padding:5px 8px;border-radius:6px;opacity:.85;pointer-events:none";
+    document.body.appendChild(aviso);
+  } catch (e) { /* nunca romper la página */ }
 }
 
 export function idSesion() {
@@ -64,7 +103,7 @@ function enviar(usarBeacon) {
   if (!cola.length) return;
   const lote = cola.splice(0, 20);
   const { referencia, utm } = contextoVisita();
-  const cuerpo = JSON.stringify({ sesion: idSesion(), referencia, utm, eventos: lote });
+  const cuerpo = JSON.stringify({ sesion: idSesion(), referencia, utm, interno: modoInterno() || undefined, eventos: lote });
   try {
     if (usarBeacon && navigator.sendBeacon) {
       navigator.sendBeacon(ENDPOINT, new Blob([cuerpo], { type: "application/json" }));
@@ -83,7 +122,10 @@ function programarEnvio() {
 }
 
 export function iniciarMedicion() {
-  if (iniciado || !activo()) return;
+  if (iniciado) return;
+  modoInterno();
+  if (typeof window !== "undefined") prepararModoInterno();
+  if (!activo()) return;
   iniciado = true;
   registrarEvento("visita", { pagina: window.location.hash.startsWith("#/") ? window.location.hash.slice(2) : "inicio" });
   // Al cerrar o cambiar de pestaña se envía lo pendiente.

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { idSesion, contextoVisita, registrarEvento } from "./medicion.js";
+import { idSesion, contextoVisita, registrarEvento, modoInterno } from "./medicion.js";
 
 // Formulario que se muestra al pedir el reporte completo en Excel. Es la forma honesta de
 // conocer a quienes usan OBRALYT: la persona deja sus datos a cambio del reporte, sabiendo
@@ -54,7 +54,7 @@ export default function FormularioContacto({ abierto, onCerrar, onListo, origen 
       const r = await fetch("/api/lead", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...f, correo: f.correo.trim(), comunicaciones: f.acepta, origen, sesion: idSesion(), referencia, utm }),
+        body: JSON.stringify({ ...f, correo: f.correo.trim(), comunicaciones: f.acepta, origen, sesion: idSesion(), referencia, utm, interno: modoInterno() || undefined }),
       });
       const datos = await r.json().catch(() => ({}));
       if (r.status === 400 && datos.motivo === "correo_invalido") { setError("Revisa el correo: parece incompleto."); setEnviando(false); return; }
