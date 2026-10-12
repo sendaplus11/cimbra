@@ -45,6 +45,24 @@ export async function asegurarEsquema(db) {
       notas TEXT
     )`),
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_leads_correo ON leads(correo)`),
+    // Eventos que NO cuentan en las estadísticas: equipo (Carlos/Jacob), pruebas y tráfico desde servidores.
+    db.prepare(`CREATE TABLE IF NOT EXISTS eventos_excluidos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      creado TEXT NOT NULL,
+      motivo TEXT NOT NULL,
+      sesion TEXT NOT NULL,
+      nombre TEXT NOT NULL,
+      datos TEXT,
+      pais TEXT,
+      dispositivo TEXT,
+      referencia TEXT,
+      utm_source TEXT,
+      utm_medium TEXT,
+      utm_campaign TEXT,
+      utm_content TEXT,
+      red TEXT
+    )`),
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_excluidos_creado ON eventos_excluidos(creado)`),
   ]);
   // Migración: las tablas creadas antes de medir utm_content no tienen esa columna.
   for (const tabla of ["eventos", "leads"]) {
@@ -84,4 +102,23 @@ export function origenPermitido(request) {
   } catch (e) {
     return false;
   }
+}
+
+// ¿Por qué un evento no debe contar? "equipo" / "prueba" (lo marca el navegador) o "servidor"
+// (la visita llega desde la red de un centro de datos: robots, agentes de IA, herramientas de prueba).
+// Devuelve null si es una visita normal.
+const RED_SERVIDOR = /amazon|aws|google cloud|google llc|microsoft|azure|digitalocean|ovh|hetzner|linode|akamai|alibaba|tencent|oracle|vultr|choopa|contabo|leaseweb|scaleway|huawei cloud|cloudflare|fastly|m247|datacamp|hostinger|godaddy|ionos|hosting|data ?cent(er|re)|colocation|servers?\b/i;
+const ASN_SERVIDOR = new Set([16509, 14618, 15169, 396982, 19527, 8075, 14061, 16276, 24940, 63949, 45102, 37963, 132203, 45090, 31898, 13335, 20473, 51167, 12876, 60781, 20940, 54113, 9009, 136907, 55990]);
+
+export function motivoExclusion(request, marcaNavegador) {
+  if (marcaNavegador === "equipo" || marcaNavegador === "prueba") return marcaNavegador;
+  const cf = request.cf || {};
+  const org = typeof cf.asOrganization === "string" ? cf.asOrganization : "";
+  if (ASN_SERVIDOR.has(Number(cf.asn)) || (RED_SERVIDOR.test(org) && !/fiber|fibra/i.test(org))) return "servidor";
+  return null;
+}
+
+export function redDe(request) {
+  const cf = request.cf || {};
+  return cf.asn ? limpio(`AS${cf.asn} ${cf.asOrganization || ""}`, 80) : null;
 }
