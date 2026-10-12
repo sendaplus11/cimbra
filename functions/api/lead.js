@@ -27,12 +27,14 @@ export async function onRequestPost({ request, env }) {
     .bind(correo, new Date(Date.now() - 10 * 60 * 1000).toISOString()).first();
   if (reciente) return json({ ok: true, repetido: true });
   await env.DB.prepare(
-    `INSERT INTO leads (creado, nombre, correo, empresa, cargo, pais, telefono, origen, sesion, pais_ip, referencia, utm_source, utm_medium, utm_campaign, utm_content, acepta_comunicaciones)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO leads (creado, nombre, correo, empresa, cargo, pais, telefono, origen, sesion, pais_ip, referencia, utm_source, utm_medium, utm_campaign, utm_content, acepta_comunicaciones, estado)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     new Date().toISOString(), limpio(c.nombre, 100), correo, limpio(c.empresa, 120), limpio(c.cargo, 60), limpio(c.pais, 60),
     limpio(c.telefono, 30), limpio(c.origen, 40), limpio(c.sesion, 40), (request.cf && request.cf.country) || null,
-    limpio(c.referencia, 200), limpio(utm.source, 60), limpio(utm.medium, 60), limpio(utm.campaign, 80), limpio(utm.content, 80), c.comunicaciones === true ? 1 : 0
+    limpio(c.referencia, 200), limpio(utm.source, 60), limpio(utm.medium, 60), limpio(utm.campaign, 80), limpio(utm.content, 80), c.comunicaciones === true ? 1 : 0,
+    // Los contactos que deja el equipo al probar el formulario quedan marcados como "prueba" (nunca se borran).
+    c.interno === "equipo" || c.interno === "prueba" ? "prueba" : "nuevo"
   ).run();
   return json({ ok: true });
 }

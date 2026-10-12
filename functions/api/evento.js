@@ -1,5 +1,5 @@
 // Registro de eventos de navegación (visita, secciones vistas, clics, uso de la herramienta).
-import { asegurarEsquema, json, limpio, dispositivo, origenPermitido } from "../../servidor/db.js";
+import { asegurarEsquema, json, limpio, dispositivo, origenPermitido, motivoExclusion, redDe } from "../../servidor/db.js";
 
 const NOMBRE_VALIDO = /^[a-z0-9_]{2,40}$/;
 
@@ -25,9 +25,16 @@ export async function onRequestPost({ request, env }) {
 
   await asegurarEsquema(env.DB);
   const ahora = new Date().toISOString();
-  const stmt = env.DB.prepare(
-    "INSERT INTO eventos (creado, sesion, nombre, datos, pais, dispositivo, referencia, utm_source, utm_medium, utm_campaign, utm_content) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-  );
+  // Equipo, pruebas y servidores van a una tabla aparte: no cuentan en las estadísticas ni en el panel.
+  const motivo = motivoExclusion(request, cuerpo.interno);
+  const red = redDe(request);
+  const stmt = motivo
+    ? env.DB.prepare(
+        "INSERT INTO eventos_excluidos (creado, motivo, sesion, nombre, datos, pais, dispositivo, referencia, utm_source, utm_medium, utm_campaign, utm_content, red) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      )
+    : env.DB.prepare(
+        "INSERT INTO eventos (creado, sesion, nombre, datos, pais, dispositivo, referencia, utm_source, utm_medium, utm_campaign, utm_content) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      );
   const lote = [];
   for (const ev of eventos) {
     const nombre = limpio(ev && ev.n, 40);
@@ -40,8 +47,9 @@ export async function onRequestPost({ request, env }) {
       }
       datos = Object.keys(d).length ? JSON.stringify(d) : null;
     }
-    lote.push(stmt.bind(ahora, sesion, nombre, datos, pais, disp, ref, limpio(utm.source, 60), limpio(utm.medium, 60), limpio(utm.campaign, 80), limpio(utm.content, 80)));
+    const valores = [sesion, nombre, datos, pais, disp, ref, limpio(utm.source, 60), limpio(utm.medium, 60), limpio(utm.campaign, 80), limpio(utm.content, 80)];
+    lote.push(motivo ? stmt.bind(ahora, motivo, ...valores, red) : stmt.bind(ahora, ...valores));
   }
   if (lote.length) await env.DB.batch(lote);
-  return json({ ok: true, guardados: lote.length });
+  return json({ ok: true, guardados: lote.length, ...(motivo ? { excluido: motivo } : {}) });
 }
