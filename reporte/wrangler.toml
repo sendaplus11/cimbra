@@ -1,0 +1,23 @@
+# Reporte automático de OBRALYT por correo (Cloudflare Worker con tarea programada).
+# Lee la misma base D1 del sitio y envía un resumen sin entrar al panel.
+name = "obralyt-reporte"
+main = "reporte.js"
+compatibility_date = "2024-09-23"
+
+# Horarios en UTC. Diario 12:05 UTC (8:05 a. m. Miami) y semanal lunes 12:10 UTC.
+[triggers]
+crons = ["5 12 * * *", "10 12 * * 1"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "PONER_NOMBRE_DE_LA_BASE"   # el mismo nombre de la base D1 enlazada al sitio (binding DB)
+database_id = "PONER_ID_DE_LA_BASE"         # Cloudflare → Storage & Databases → D1 → la base → Database ID
+
+# Envío con Cloudflare Email Routing (gratis). El destino debe estar verificado en Email Routing de obralyt.com.
+[[send_email]]
+name = "CORREO"
+allowed_destination_addresses = ["cimbra.soporte@gmail.com"]
+
+[vars]
+REMITENTE = "reportes@obralyt.com"
+DESTINATARIOS = "cimbra.soporte@gmail.com"   # separar con comas si son varios (todos verificados en Email Routing)

@@ -12,3 +12,8 @@
 /ig       /?utm_source=instagram&utm_medium=bio 302
 /yt/*     /?utm_source=youtube&utm_medium=video&utm_content=:splat 302
 /yt       /?utm_source=youtube&utm_medium=canal 302
+
+# Prospección por empresa (licitaciones públicas). Cada constructora recibe su propio enlace:
+# obralyt.com/c/900050857 (NIT) → se guarda como utm_content y el panel muestra qué empresa
+# abrió el mensaje, cargó su presupuesto, completó el análisis y dejó su correo.
+/c/*      /?utm_source=secop&utm_medium=prospeccion&utm_content=:splat 302
