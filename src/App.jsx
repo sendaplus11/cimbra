@@ -116,7 +116,10 @@ export default function App() {
   if (hash === "#/terminos") return <Legal tipo="terminos" />;
 
   return (
-    <div className="min-h-screen bg-white text-obralyt-dark font-sans">
+    // overflow-x-clip: los tooltips ocultos de los gráficos quedan posicionados fuera del borde y, en el
+    // celular, ensanchaban la página (se movía de lado y el formulario del reporte quedaba cortado).
+    // «clip» no crea un contenedor de desplazamiento, así que la barra fija de secciones sigue funcionando.
+    <div className="min-h-screen bg-white text-obralyt-dark font-sans overflow-x-clip">
       {/* Barra superior */}
       <header className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-gray-100">
         <div className="max-w-5xl mx-auto px-4 py-2 flex items-center justify-between">
@@ -186,7 +189,7 @@ export default function App() {
             poster="/video/obralyt-como-funciona.jpg"
             onPlay={(e) => { if (!e.currentTarget.dataset.medido) { e.currentTarget.dataset.medido = "1"; registrarEvento("video_reproducido"); } }}
             onEnded={() => registrarEvento("video_completado")}>
-            <source src="/video/obralyt-como-funciona.mp4?v=audio3" type="video/mp4" />
+            <source src="/video/obralyt-como-funciona.mp4?v=audio3-faststart" type="video/mp4" />
             Tu navegador no puede reproducir este video.
           </video>
           <p className="text-center mt-4">
