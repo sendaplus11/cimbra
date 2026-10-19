@@ -190,6 +190,34 @@ export default function Panel() {
               )}
             </section>
 
+            <section className="bg-white border border-gray-200 rounded-lg p-4 mb-6">
+              <h2 className="text-base font-semibold mb-1">Prospección por empresa — {(datos.prospeccion || []).length}</h2>
+              <p className="text-xs text-gray-500 mb-3">Empresas que entraron con su enlace propio (obralyt.com/c/código). Cuenta visitas únicas.</p>
+              {!(datos.prospeccion || []).length && <p className="text-sm text-gray-400">Todavía ninguna empresa contactada ha abierto su enlace.</p>}
+              {(datos.prospeccion || []).length > 0 && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead><tr className="text-left text-gray-500 border-b border-gray-200">
+                      {["Empresa (código)", "Abrió", "Cargó presupuesto", "Completó análisis", "Dejó correo", "Primera visita", "Última actividad"].map((h) => <th key={h} className="py-1.5 pr-3 font-medium whitespace-nowrap">{h}</th>)}
+                    </tr></thead>
+                    <tbody>
+                      {datos.prospeccion.map((p) => (
+                        <tr key={p.empresa} className="border-b border-gray-100">
+                          <td className="py-1.5 pr-3 font-medium">{p.empresa}</td>
+                          <td className="py-1.5 pr-3">{p.visitas}</td>
+                          <td className="py-1.5 pr-3">{p.cargas}</td>
+                          <td className="py-1.5 pr-3" style={{ color: p.completados ? "#C9922B" : undefined, fontWeight: p.completados ? 600 : undefined }}>{p.completados}</td>
+                          <td className="py-1.5 pr-3">{p.leads}</td>
+                          <td className="py-1.5 pr-3 whitespace-nowrap">{fmtFecha(p.primera)}</td>
+                          <td className="py-1.5 pr-3 whitespace-nowrap">{fmtFecha(p.ultima)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
             <div className="grid md:grid-cols-2 gap-4 mb-6">
               <Tabla titulo="Visitas por día" filas={datos.porDia} col1="dia" />
               <Tabla titulo="De dónde llegan" filas={datos.fuentes} col1="fuente" />

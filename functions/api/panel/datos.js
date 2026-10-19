@@ -25,7 +25,7 @@ export async function onRequestGet({ request, env }) {
   const db = env.DB;
   const q = (sql, ...args) => db.prepare(sql).bind(...args).all().then((r) => r.results || []);
 
-  const [leads, embudo, porDia, fuentes, paises, dispositivos, secciones, preguntas, botones, activaciones, porContenido, activacionesPorContenido] = await Promise.all([
+  const [leads, embudo, porDia, fuentes, paises, dispositivos, secciones, preguntas, botones, activaciones, porContenido, activacionesPorContenido, prospeccion, leadsProspeccion] = await Promise.all([
     q("SELECT * FROM leads ORDER BY creado DESC LIMIT 1000"),
     q("SELECT nombre, COUNT(DISTINCT sesion) AS sesiones, COUNT(*) AS veces FROM eventos WHERE creado >= ? GROUP BY nombre ORDER BY sesiones DESC", desde),
     q("SELECT substr(creado,1,10) AS dia, COUNT(DISTINCT sesion) AS sesiones FROM eventos WHERE creado >= ? GROUP BY dia ORDER BY dia", desde),
@@ -46,6 +46,19 @@ export async function onRequestGet({ request, env }) {
     q(`SELECT COALESCE(NULLIF(utm_source,''),'?') || ' · ' || utm_content AS pieza, COUNT(DISTINCT sesion) AS sesiones
        FROM eventos WHERE creado >= ? AND nombre = 'analisis_completado' AND json_extract(datos,'$.origen') = 'archivo' AND COALESCE(utm_content,'') <> ''
        GROUP BY pieza ORDER BY sesiones DESC LIMIT 25`, desde),
+    // Prospección por empresa (enlaces obralyt.com/c/<código>): embudo de cada constructora contactada.
+    q(`SELECT utm_content AS empresa,
+       COUNT(DISTINCT CASE WHEN nombre = 'visita' THEN sesion END) AS visitas,
+       COUNT(DISTINCT CASE WHEN nombre = 'presupuesto_cargado' THEN sesion END) AS cargas,
+       COUNT(DISTINCT CASE WHEN nombre = 'analisis_completado' AND json_extract(datos,'$.origen') = 'archivo' THEN sesion END) AS completados,
+       MIN(creado) AS primera, MAX(creado) AS ultima
+       FROM eventos WHERE creado >= ? AND utm_medium = 'prospeccion' AND COALESCE(utm_content,'') <> ''
+       GROUP BY utm_content ORDER BY completados DESC, cargas DESC, visitas DESC LIMIT 500`, desde),
+    q(`SELECT utm_content AS empresa, COUNT(*) AS leads FROM leads
+       WHERE creado >= ? AND utm_medium = 'prospeccion' AND COALESCE(utm_content,'') <> '' AND estado <> 'prueba'
+       GROUP BY utm_content`, desde),
   ]);
-  return json({ ok: true, dias, leads, embudo, porDia, fuentes, paises, dispositivos, secciones, preguntas, botones, activaciones, porContenido, activacionesPorContenido });
+  const leadsPorEmpresa = Object.fromEntries(leadsProspeccion.map((l) => [l.empresa, l.leads]));
+  for (const p of prospeccion) p.leads = leadsPorEmpresa[p.empresa] || 0;
+  return json({ ok: true, dias, leads, embudo, porDia, fuentes, paises, dispositivos, secciones, preguntas, botones, activaciones, porContenido, activacionesPorContenido, prospeccion });
 }
