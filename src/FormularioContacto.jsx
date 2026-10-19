@@ -71,11 +71,12 @@ export default function FormularioContacto({ abierto, onCerrar, onListo, origen 
     onListo();
   };
 
-  const campo = "w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white focus:outline-none focus:border-gray-500";
+  // min-w-0: sin esto, las opciones largas de los <select> ensanchan el formulario más que la pantalla del celular.
+  const campo = "w-full min-w-0 border border-gray-300 rounded px-2 py-1.5 text-sm bg-white focus:outline-none focus:border-gray-500";
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="titulo-contacto">
       <div className="absolute inset-0 bg-black/40" onClick={cerrar}></div>
-      <form onSubmit={enviar} className="relative bg-white w-full sm:max-w-md rounded-t-xl sm:rounded-xl shadow-xl p-5 max-h-[92vh] overflow-y-auto text-left">
+      <form onSubmit={enviar} className="relative bg-white w-full max-w-full sm:max-w-md rounded-t-xl sm:rounded-xl shadow-xl p-5 max-h-[92vh] overflow-y-auto text-left">
         <button type="button" onClick={cerrar} aria-label="Cerrar" className="absolute top-3 right-3 text-gray-400 hover:text-gray-700 text-lg leading-none">✕</button>
         <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "#C9922B" }}>Reporte completo en Excel</p>
         <h2 id="titulo-contacto" className="text-lg font-semibold mt-1 mb-1" style={{ color: "#1C2B39" }}>¿A quién le enviamos las novedades?</h2>
@@ -83,31 +84,31 @@ export default function FormularioContacto({ abierto, onCerrar, onListo, origen 
           El reporte se descarga en cuanto completes el formulario. OBRALYT está en fase de prueba y tus datos nos ayudan a mejorarlo:
           te escribiremos solo sobre OBRALYT (mejoras, nuevas funciones, invitación a dar tu opinión). <strong>Tu presupuesto no se envía</strong>: solo estos datos.
         </p>
-        <div className="grid grid-cols-1 gap-3">
-          <label className="text-xs text-gray-700">Nombre y apellido
+        <div className="grid grid-cols-1 gap-3 min-w-0">
+          <label className="text-xs text-gray-700 min-w-0">Nombre y apellido
             <input ref={primerCampo} className={campo} value={f.nombre} onChange={set("nombre")} autoComplete="name" maxLength={100} />
           </label>
-          <label className="text-xs text-gray-700">Correo electrónico <span className="text-red-600">*</span>
+          <label className="text-xs text-gray-700 min-w-0">Correo electrónico <span className="text-red-600">*</span>
             <input type="email" required className={campo} value={f.correo} onChange={set("correo")} autoComplete="email" maxLength={254} placeholder="tu@empresa.com" />
           </label>
           <div className="grid grid-cols-2 gap-3">
-            <label className="text-xs text-gray-700">Empresa
+            <label className="text-xs text-gray-700 min-w-0">Empresa
               <input className={campo} value={f.empresa} onChange={set("empresa")} autoComplete="organization" maxLength={120} />
             </label>
-            <label className="text-xs text-gray-700">País
+            <label className="text-xs text-gray-700 min-w-0">País
               <select className={campo} value={f.pais} onChange={set("pais")}>
                 <option value="">Elegir…</option>
                 {PAISES.map((p) => <option key={p}>{p}</option>)}
               </select>
             </label>
           </div>
-          <label className="text-xs text-gray-700">¿Cuál es tu rol?
+          <label className="text-xs text-gray-700 min-w-0">¿Cuál es tu rol?
             <select className={campo} value={f.cargo} onChange={set("cargo")}>
               <option value="">Elegir…</option>
               {CARGOS.map((c) => <option key={c}>{c}</option>)}
             </select>
           </label>
-          <label className="text-xs text-gray-700">WhatsApp <span className="text-gray-400">(opcional)</span>
+          <label className="text-xs text-gray-700 min-w-0">WhatsApp <span className="text-gray-400">(opcional)</span>
             <input type="tel" className={campo} value={f.telefono} onChange={set("telefono")} autoComplete="tel" maxLength={30} placeholder="+58 414 1234567" />
           </label>
           {/* Campo trampa para robots: invisible para las personas. */}

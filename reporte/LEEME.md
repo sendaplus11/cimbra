@@ -7,7 +7,7 @@ Worker aparte del sitio (las Pages Functions no tienen tareas programadas). Env�
 
 ## Instalación (una sola vez, ~10 minutos)
 
-1. **Email Routing de obralyt.com** (Cloudflare → obralyt.com → Email → Email Routing): activarlo y verificar como destino `cimbra.soporte@gmail.com` (llega un correo de confirmación).
+1. **Email Routing de obralyt.com** (Cloudflare → obralyt.com → Email → Email Routing): activarlo y verificar como destino `obralyt.soporte@gmail.com` (llega un correo de confirmación).
 2. **Datos de la base**: Cloudflare → Storage & Databases → D1 → la base que usa el sitio. Copiar su nombre y su *Database ID* en `wrangler.toml`.
 3. **Publicar** desde esta carpeta:
    ```
