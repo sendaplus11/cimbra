@@ -2,7 +2,10 @@
 // formatos más comunes (español e inglés, con o sin acentos, con o sin encabezados),
 // interpreta montos escritos como texto ("1.234,56", "$1,234.56", "(500)") y elige la hoja
 // del libro que contiene el presupuesto. No depende de React: recibe y devuelve datos simples.
-import * as XLSX from "xlsx-js-style";
+import * as XLSXmod from "xlsx-js-style";
+
+// En el navegador (Vite) y en Node (pruebas) la librería llega envuelta de forma distinta.
+const XLSX = XLSXmod.read ? XLSXmod : XLSXmod.default;
 
 // ---------------------------------------------------------------- utilidades de texto
 
@@ -82,8 +85,9 @@ const NIVELES_DESCRIPCION = [
 const NIVELES_MONTO = [
   /^(total|importe total|monto total|valor total|costo total|precio total|total amount|total cost|total price|total general|line total|extended|extended cost|extended price|ext cost|ext price)$/,
   /\btotal\b(?!.*\b(cantidad|qty)\b)/,
-  /^(monto|importe|amount|monto bs|importe bs|monto usd|monto us|valor|valor bs|valor usd|costo|cost|precio|price|extension)\b|\bmonto\b|\bimporte\b|\bamount\b/,
+  // «Parcial» (S10 y similares) va antes que «Precio»/«Valor» sueltos, que suelen ser el unitario.
   /sub ?total|parcial|partial/,
+  /^(monto|importe|amount|monto bs|importe bs|monto usd|monto us|valor|valor bs|valor usd|costo|cost|precio|price|extension)\b|\bmonto\b|\bimporte\b|\bamount\b/,
   /presupuesto|budget|\bbs\b|\busd\b|us\$|costo|valor|precio|price|cost/,
 ];
 
@@ -191,7 +195,7 @@ function corregirColumnaMonto(filas, det, cols) {
         conDatos++;
         if (Math.abs(cq * cu - ct) <= Math.max(0.02, Math.abs(ct) * 0.01)) cuadran++;
       }
-      if (conDatos >= 3 && cuadran / conDatos >= 0.6 && (!mejor || cuadran > mejor.cuadran)) mejor = { total, unit, cuadran };
+      if (conDatos >= 2 && cuadran / conDatos >= 0.6 && (!mejor || cuadran > mejor.cuadran)) mejor = { total, unit, cuadran };
     }
   }
   if (mejor && mejor.total !== det.amountIdx) {
@@ -243,13 +247,15 @@ function detectarPorContenido(filas) {
 
 // Textos de una sola celda que NO son capítulos (títulos de columna, totales, etc.).
 const NO_ES_CAPITULO = /^(partidas?|descripci[oó]n|description|[ií]tem|item|total|sub-?total|obra|cliente|servicio|propietario|fecha|project|proyecto|client|date)\b/i;
+// Número de capítulo en su propia celda: «1», «02», «A», «CAP. 3», «Capítulo 4».
+const CODIGO_DE_CAPITULO = /^((cap(i|í)tulo|cap)\.?\s*)?(\d{1,3}|[A-Z])\.?$/i;
 // Filas que traen totales, subtotales o impuestos en la columna de descripción: no son partidas.
 // Incluye "VALOR TOTAL" al pie de los formularios de oferta económica de SECOP II.
 const FILA_DE_TOTAL = /^\s*(i\.?v\.?a\b|i\.?g\.?v\b|impuesto|sub-?total|total\b|(valor|costo|precio|monto|importe)\s+total\b|grand total|tax\b|vat\b|sales tax)/i;
 // Líneas que suelen ser ajustes financieros y no trabajos de obra: se avisan, no se excluyen.
 const LINEA_DE_AJUSTE = /variaci[oó]n de precios|escalaci[oó]n|imprevistos|reajuste de precios|contingencias?\b|contingency|escalation|price adjustment|incremento por modificaci|aumento de costos|ajuste por inflaci/i;
 // Rubros de cierre del presupuesto (se calculan como % del costo directo): no son partidas de obra.
-const RUBRO_DE_CIERRE = /^\s*(total\s+)?(costo|costos)\s+(directo|indirecto)s?\b|^\s*gastos?\s+generales\b|^\s*utilidad(es)?\b|^\s*a\.?\s?i\.?\s?u\b|^\s*administraci[oó]n,?\s+imprevistos|^\s*overhead\b|^\s*profit\b|^\s*financiamiento\b|^\s*(fianzas?|p[oó]lizas?)\s+y\b|^\s*beneficios?\b|^\s*indirectos?\b|^\s*cargos?\s+adicionales\b|^\s*honorarios\b/i;
+const RUBRO_DE_CIERRE = /^\s*(total\s+)?(costo|costos)\s+(directo|indirecto)s?\b|^\s*gastos?\s+generales\b|^\s*utilidad(es)?\b|^\s*a\.?\s?i\.?\s?u\b|^\s*administraci[oó]n,?\s+imprevistos|^\s*overhead\b|^\s*profit\b|^\s*financiamiento\b|^\s*(fianzas?|p[oó]lizas?)\s+y\b|^\s*(fianzas?|p[oó]lizas?|bonds?|bonding|performance\s+bond)\s*$|^\s*beneficios?\b|^\s*indirectos?\b|^\s*cargos?\s+adicionales\b|^\s*honorarios\b/i;
 // A partir de estas filas, lo que sigue es el cierre del presupuesto (totales, impuestos, % de ley).
 const FIN_DE_PARTIDAS = /^\s*(total\s+)?costo\s+(directo|neto)\b|^\s*total\s+(general|presupuesto|de\s+la\s+obra|obra|del\s+presupuesto)\b|^\s*presupuesto\s+total\b|^\s*grand\s+total\b|^\s*monto\s+total\s+(de\s+la\s+)?(obra|oferta|presupuesto)\b/i;
 
@@ -347,6 +353,12 @@ export function leerHoja(hoja) {
   const esEncabezado = (row) => {
     const celdas = [];
     row.forEach((c, j) => { if (!vacia(c)) celdas.push([j, c]); });
+    // También «1 | PRELIMINARES» o «CAP. 2 | CIMENTACIÓN»: número de capítulo y título, sin monto.
+    if (celdas.length === 2 && CODIGO_DE_CAPITULO.test(String(celdas[0][1]).trim()) && typeof celdas[1][1] === "string" && celdas[1][0] <= nameIdx) {
+      const texto = String(celdas[1][1]).trim();
+      if (texto.length < 3 || NO_ES_CAPITULO.test(texto) || FILA_DE_TOTAL.test(texto)) return null;
+      return { col: celdas[0][0], texto: limpiarCapitulo(String(celdas[0][1]).trim() + " " + texto) };
+    }
     if (celdas.length !== 1) return null;
     const [j, c] = celdas[0];
     const texto = String(c).trim();
@@ -378,7 +390,9 @@ export function leerHoja(hoja) {
     const amount = montoDe(row);
     const nombreLimpio = name ? String(name).trim().replace(/^(descripci[oó]n|description)\s*:\s*/i, "") : "";
     if (!nombreLimpio) continue;
-    const codigo = codigoIdx !== -1 && !vacia(row[codigoIdx]) ? String(row[codigoIdx]).trim() : null;
+    // Los ítems escritos como número arrastran errores de coma flotante (7.399999999999999 → 7.4).
+    const celdaCodigo = codigoIdx !== -1 ? row[codigoIdx] : null;
+    const codigo = vacia(celdaCodigo) ? null : typeof celdaCodigo === "number" ? String(+celdaCodigo.toFixed(6)) : String(celdaCodigo).trim();
     const unidad = uomIdx !== -1 && !vacia(row[uomIdx]) ? String(row[uomIdx]).trim() : "";
     const cantidadNum = cantIdx !== -1 ? parsearNumero(row[cantIdx]) : NaN;
     const sinMedicion = !unidad && !(cantidadNum > 0);
@@ -386,7 +400,10 @@ export function leerHoja(hoja) {
     if (!codigo && FIN_DE_PARTIDAS.test(nombreLimpio)) break;
     if (FILA_DE_TOTAL.test(nombreLimpio)) continue;
     // Gastos generales, utilidad, AIU…: se calculan sobre el costo directo, no son obra.
-    if (RUBRO_DE_CIERRE.test(nombreLimpio) && (sinMedicion || /%/.test(nombreLimpio))) {
+    // Excepción: un ítem numerado que remite a otra hoja («12 COSTO DIRECTO URBANISMO (VER ANEXO)»)
+    // es obra cuyo detalle está aparte, no un rubro de cierre.
+    const remiteAOtraHoja = codigo && /\b(ver|v[eé]ase)\b.*\b(anexo|hoja|detalle)\b/i.test(nombreLimpio);
+    if (RUBRO_DE_CIERRE.test(nombreLimpio) && !remiteAOtraHoja && (sinMedicion || /%/.test(nombreLimpio))) {
       if (amount > 0) rubrosCierre.push(nombreLimpio);
       continue;
     }
@@ -422,18 +439,34 @@ export function leerHoja(hoja) {
       }
     });
   }
+  // Subtotal al pie del capítulo sin la palabra «subtotal»: una fila sin unidad ni cantidad que
+  // repite el nombre de un capítulo ya abierto y suma exactamente las partidas que tiene encima.
+  const nombresDeCapitulo = new Set([...encabezados.values()].map((h) => normalizarEncabezado(h.texto)));
+  candidatas.forEach((c, i) => {
+    if (padres.has(i) || !c.sinMedicion || !nombresDeCapitulo.has(normalizarEncabezado(c.name))) return;
+    let suma = 0;
+    for (let j = i - 1; j >= 0 && !candidatas[j].sinMedicion && !padres.has(j); j--) {
+      suma += candidatas[j].monto;
+      if (Math.abs(suma - c.monto) <= Math.max(0.05, c.monto * 0.001)) { padres.add(i); break; }
+    }
+  });
   let capitulosPorSubtotal = 0;
   if (padres.size) {
     // El nivel superior de la jerarquía es el capítulo de cada partida.
     let capActual = null;
+    let capCodigo = null;
     let nivelTope = Infinity;
+    const raiz = (codigo) => (codigo ? codigo.split(/[.\-]/).filter(Boolean)[0] : null);
     padres.forEach((i) => { const c = candidatas[i]; if (c.codigo) nivelTope = Math.min(nivelTope, c.codigo.split(/[.\-]/).filter(Boolean).length); });
     candidatas.forEach((c, i) => {
       if (padres.has(i)) {
         const nivel = c.codigo ? c.codigo.split(/[.\-]/).filter(Boolean).length : nivelTope;
-        if (!c.codigo || nivel === nivelTope) { capActual = limpiarCapitulo((c.codigo ? c.codigo + " " : "") + c.name); capitulosPorSubtotal++; }
+        if (!c.codigo || nivel === nivelTope) { capActual = limpiarCapitulo((c.codigo ? c.codigo + " " : "") + c.name); capCodigo = raiz(c.codigo); capitulosPorSubtotal++; }
       } else if (capActual && !c.capitulo) {
-        c.capitulo = capActual;
+        // Un ítem de primer nivel sin hijas («12 URBANISMO (VER ANEXO)») es su propio capítulo,
+        // no parte del capítulo anterior.
+        const propio = c.codigo && capCodigo && raiz(c.codigo) !== capCodigo && c.codigo.split(/[.\-]/).filter(Boolean).length === nivelTope;
+        c.capitulo = propio ? limpiarCapitulo(c.codigo + " " + c.name) : capActual;
       }
     });
     candidatas = candidatas.filter((_, i) => !padres.has(i));
@@ -513,6 +546,9 @@ function esLibroBinario(b) {
   return (b[0] === 0x50 && b[1] === 0x4b) || (b[0] === 0xd0 && b[1] === 0xcf && b[2] === 0x11 && b[3] === 0xe0);
 }
 
+const HOJA_DE_PRESUPUESTO = /presupuesto|budget|estimate|oferta|formulario|cantidades|cat[aá]logo|bill of quantities|\bboq\b/i;
+const HOJA_DE_APU = /\bapus?\b|an[aá]lisis|unitarios?|insumos?|materiales|mano de obra|equipos?|cotizaci|rendimientos?/i;
+
 // Lee los bytes de un Excel o CSV y devuelve el mejor resultado entre todas las hojas.
 // { partidas, sinMonto, totalArchivo, moneda, notas, capitulos, hoja, otrasHojas } o { error }.
 export function leerPresupuesto(bytes) {
@@ -527,16 +563,21 @@ export function leerPresupuesto(bytes) {
   }
   if (!libro.SheetNames.length) return { error: "El archivo no tiene hojas." };
 
+  // Entre varias hojas legibles gana la que tiene más partidas, pero una hoja de análisis de
+  // precios unitarios (APU, insumos) nunca le gana a una de presupuesto: suele tener más filas.
   let mejor = null;
   let primerError = null;
+  const prioridad = (nombre) => HOJA_DE_PRESUPUESTO.test(nombre) ? 2 : HOJA_DE_APU.test(nombre) ? 0 : 1;
   for (const nombre of libro.SheetNames) {
     const hoja = libro.Sheets[nombre];
     if (!hoja || !hoja["!ref"]) continue;
     let r;
     try { r = leerHoja(hoja); } catch (e) { continue; }
     if (r.error) { if (!primerError) primerError = r.error; continue; }
-    if (!mejor || r.partidas.length > mejor.partidas.length) mejor = { ...r, hoja: nombre };
+    const p = prioridad(nombre);
+    if (!mejor || p > mejor.prioridad || (p === mejor.prioridad && r.partidas.length > mejor.partidas.length)) mejor = { ...r, hoja: nombre, prioridad: p };
   }
+  if (mejor) delete mejor.prioridad;
   if (!mejor) return { error: primerError || "No se encontraron partidas válidas en el archivo." };
 
   const otras = libro.SheetNames.filter((n) => {
