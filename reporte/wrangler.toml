@@ -16,8 +16,8 @@ database_id = "PONER_ID_DE_LA_BASE"         # Cloudflare → Storage & Databases
 # Envío con Cloudflare Email Routing (gratis). El destino debe estar verificado en Email Routing de obralyt.com.
 [[send_email]]
 name = "CORREO"
-allowed_destination_addresses = ["cimbra.soporte@gmail.com"]
+allowed_destination_addresses = ["obralyt.soporte@gmail.com"]
 
 [vars]
 REMITENTE = "reportes@obralyt.com"
-DESTINATARIOS = "cimbra.soporte@gmail.com"   # separar con comas si son varios (todos verificados en Email Routing)
+DESTINATARIOS = "obralyt.soporte@gmail.com"   # separar con comas si son varios (todos verificados en Email Routing)

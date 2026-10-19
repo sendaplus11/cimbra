@@ -170,10 +170,13 @@ function corregirColumnaMonto(filas, det, cols) {
   if (det.cantIdx === -1 || det.amountIdx === -1) return;
   const q = det.cantIdx;
   const candidatas = cols.filter((k) => k.i !== q && k.i !== det.nameIdx && k.i !== det.codigoIdx && k.i !== det.uomIdx).map((k) => k.i);
+  // Una columna de cantidad (p. ej. "CANT. TOTAL" = cantidad por vivienda × número de viviendas)
+  // también cuadra como producto, pero nunca es el monto.
+  const totales = candidatas.filter((i) => !cols[i].cantidad);
   const desde = det.headerRowIdx + 1;
   const hasta = Math.min(filas.length, desde + 400);
   let mejor = null;
-  for (const total of candidatas) {
+  for (const total of totales) {
     for (const unit of candidatas) {
       if (unit === total) continue;
       let conDatos = 0;
@@ -241,7 +244,8 @@ function detectarPorContenido(filas) {
 // Textos de una sola celda que NO son capítulos (títulos de columna, totales, etc.).
 const NO_ES_CAPITULO = /^(partidas?|descripci[oó]n|description|[ií]tem|item|total|sub-?total|obra|cliente|servicio|propietario|fecha|project|proyecto|client|date)\b/i;
 // Filas que traen totales, subtotales o impuestos en la columna de descripción: no son partidas.
-const FILA_DE_TOTAL = /^\s*(i\.?v\.?a\b|i\.?g\.?v\b|impuesto|sub-?total|total\b|grand total|tax\b|vat\b|sales tax)/i;
+// Incluye "VALOR TOTAL" al pie de los formularios de oferta económica de SECOP II.
+const FILA_DE_TOTAL = /^\s*(i\.?v\.?a\b|i\.?g\.?v\b|impuesto|sub-?total|total\b|(valor|costo|precio|monto|importe)\s+total\b|grand total|tax\b|vat\b|sales tax)/i;
 // Líneas que suelen ser ajustes financieros y no trabajos de obra: se avisan, no se excluyen.
 const LINEA_DE_AJUSTE = /variaci[oó]n de precios|escalaci[oó]n|imprevistos|reajuste de precios|contingencias?\b|contingency|escalation|price adjustment|incremento por modificaci|aumento de costos|ajuste por inflaci/i;
 // Rubros de cierre del presupuesto (se calculan como % del costo directo): no son partidas de obra.
