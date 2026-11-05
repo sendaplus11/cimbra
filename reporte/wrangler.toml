@@ -13,11 +13,12 @@ binding = "DB"
 database_name = "obralyt"   # base D1 enlazada al sitio (binding DB)
 database_id = "8c9fad54-afbb-4259-a1e9-0071a40494b8"
 
-# Envío con Cloudflare Email Routing (gratis). El destino debe estar verificado en Email Routing de obralyt.com.
+# Envío con Cloudflare Email Routing (gratis), desde el subdominio avisos.obralyt.com: el dominio raíz
+# recibe su correo en Zoho Mail. El destino debe estar verificado en Email Routing.
 [[send_email]]
 name = "CORREO"
 allowed_destination_addresses = ["obralyt.soporte@gmail.com"]
 
 [vars]
-REMITENTE = "reportes@obralyt.com"
+REMITENTE = "reportes@avisos.obralyt.com"
 DESTINATARIOS = "obralyt.soporte@gmail.com"   # separar con comas si son varios (todos verificados en Email Routing)

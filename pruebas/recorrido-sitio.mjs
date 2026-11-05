@@ -52,9 +52,10 @@ for (const [desde, hacia] of REDIRECCIONES) {
   else bien("Redirección " + desde + " → " + hacia);
 }
 for (const [ruta, tipo] of [["/", "text/html"], ["/robots.txt", "text/plain"], ["/sitemap.xml", "xml"], ["/og-image.png", "image/png"], ["/apple-touch-icon.png", "image/png"], ["/video/obralyt-como-funciona.jpg", "image/jpeg"], ["/video/obralyt-como-funciona.mp4?v=voz-carlos-1", "video/mp4"]]) {
-  const r = await http.get(BASE + ruta);
+  // Del video basta el primer kilobyte (como lo pide el navegador): bajarlo entero por el proxy se corta.
+  const r = await http.get(BASE + ruta, ruta.includes(".mp4") ? { headers: { range: "bytes=0-1023" } } : undefined);
   const ct = r.headers()["content-type"] || "";
-  if (r.status() !== 200 || !ct.includes(tipo)) fallo("Archivo " + ruta, r.status() + " " + ct);
+  if (![200, 206].includes(r.status()) || !ct.includes(tipo)) fallo("Archivo " + ruta, r.status() + " " + ct);
   else bien("Archivo " + ruta);
 }
 const html = await (await http.get(BASE + "/")).text();
