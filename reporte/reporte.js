@@ -58,7 +58,8 @@ function mime(remitente, para, asunto, cuerpo) {
     `From: OBRALYT Reportes <${remitente}>`,
     `To: ${para}`,
     `Subject: =?UTF-8?B?${b64(asunto)}?=`,
-    `Message-ID: <${crypto.randomUUID()}@obralyt.com>`,
+    // El dominio del Message-ID debe ser el del remitente (avisos.obralyt.com), o Gmail lo mira con recelo.
+    `Message-ID: <${crypto.randomUUID()}@${remitente.split("@")[1]}>`,
     `Date: ${new Date().toUTCString()}`,
     "MIME-Version: 1.0",
     "Content-Type: text/html; charset=UTF-8",

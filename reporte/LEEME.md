@@ -6,6 +6,7 @@ Worker aparte del sitio (las Pages Functions no tienen tareas programadas). Env�
 - **Semanal** los lunes: lo mismo para los últimos 7 días.
 
 **Estado:** publicado y funcionando desde el 19-oct-2026 (base D1 `obralyt`, ya anotada en `wrangler.toml`). No hace falta volver a instalarlo.
+**Remitente:** `reportes@avisos.obralyt.com`. El dominio raíz obralyt.com recibe su correo en Zoho Mail; el reporte sale por Email Routing del subdominio `avisos.obralyt.com`. Al tocar el DNS de obralyt.com, no borrar los registros de `avisos`.
 Los horarios están en UTC: después del cambio de hora de noviembre, el diario llega a las 7:05 a. m. de Miami.
 
 ## Instalación (una sola vez, ~10 minutos)
