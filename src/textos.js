@@ -38,6 +38,8 @@ export const REDES = [
 
 export const LANDING = {
   cta: "Probar gratis",
+  // Nota bajo el botón «Probar gratis» mientras dure la fase de prueba. Vacía, no se muestra.
+  ctaNota: "Gratis durante la fase de prueba",
   etiqueta: "Inteligencia de costos",
   mensaje10s: "Tu software calcula el presupuesto. OBRALYT te ayuda a saber dónde mirar.",
   apoyo:
