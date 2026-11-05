@@ -134,7 +134,7 @@ function NavResultados({ onDescargar, puedeDescargar }) {
     return () => obs.disconnect();
   }, []);
   return (
-    <nav aria-label="Secciones del análisis" className="sticky z-[9] -mx-4 px-4 py-2 mb-4 bg-white/95 backdrop-blur border-y border-gray-200" style={{ top: 52 }}>
+    <nav aria-label="Secciones del análisis" className="sticky z-[9] -mx-4 px-4 py-2 mb-4 bg-white/95 backdrop-blur border-y border-gray-200" style={{ top: "var(--alto-barra, 52px)" }}>
       <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap" style={{ scrollbarWidth: "none" }}>
         <span className="text-[11px] uppercase tracking-wide text-gray-400 mr-1 hidden md:inline">Ir a</span>
         {SECCIONES_RESULTADO.map((sec) => (

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import AnalisisPareto from "./AnalisisPareto.jsx";
 import Legal from "./Legal.jsx";
 import Panel from "./Panel.jsx";
@@ -101,6 +101,18 @@ export default function App() {
   useEffect(() => { setMenuAbierto(false); }, [hash]);
   const esLegal = hash === "#/privacidad" || hash === "#/terminos";
   const esPanel = hash === "#/panel";
+  // Alto real de la barra superior (cambia con la nota bajo «Probar gratis»): lo usan la barra de
+  // secciones del análisis, que se pega justo debajo, y los saltos a cada sección.
+  const barra = useRef(null);
+  useEffect(() => {
+    const el = barra.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const fijar = () => document.documentElement.style.setProperty("--alto-barra", el.offsetHeight + "px");
+    fijar();
+    const obs = new ResizeObserver(fijar);
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [esPanel, esLegal]);
   // El panel privado no se mide (así las visitas de Carlos no ensucian las estadísticas).
   useEffect(() => { if (!esPanel) iniciarMedicion(); }, []);
   useEffect(() => {
@@ -121,7 +133,7 @@ export default function App() {
     // «clip» no crea un contenedor de desplazamiento, así que la barra fija de secciones sigue funcionando.
     <div className="min-h-screen bg-white text-obralyt-dark font-sans overflow-x-clip">
       {/* Barra superior */}
-      <header className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-gray-100">
+      <header ref={barra} className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-gray-100">
         <div className="max-w-5xl mx-auto px-4 py-2 flex items-center justify-between">
           <a href="#" onClick={(e) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: "smooth" }); }} aria-label="Ir al inicio">
             <img src={logoHeader} alt="OBRALYT" className="h-7 sm:h-9 w-auto" />
@@ -130,7 +142,10 @@ export default function App() {
             {MENU.map((m) => (
               <a key={m.href} href={m.href} className="hidden md:inline text-gray-600 hover:text-obralyt-dark">{m.texto}</a>
             ))}
-            <a href="#herramienta" onClick={clicProbar("barra_superior")} className={btnCta + " text-sm px-3 sm:px-4 py-1.5 rounded whitespace-nowrap"}>{T.cta}</a>
+            <div className="flex flex-col items-center">
+              <a href="#herramienta" onClick={clicProbar("barra_superior")} className={btnCta + " text-sm px-3 sm:px-4 py-1.5 rounded whitespace-nowrap"}>{T.cta}</a>
+              {T.ctaNota && <span className="mt-0.5 text-[10px] leading-tight text-gray-500 whitespace-nowrap">{T.ctaNota}</span>}
+            </div>
             <button type="button" className="md:hidden text-obralyt-dark px-1 text-xl leading-none" aria-expanded={menuAbierto} aria-label="Abrir menú"
               onClick={() => setMenuAbierto((v) => !v)}>{menuAbierto ? "✕" : "☰"}</button>
           </nav>
@@ -166,7 +181,7 @@ export default function App() {
       </section>
 
       {/* Cómo funciona */}
-      <section id="como-funciona" className="max-w-5xl mx-auto px-4 pt-10 pb-6 scroll-mt-14">
+      <section id="como-funciona" className="max-w-5xl mx-auto px-4 pt-10 pb-6 scroll-mt-[calc(var(--alto-barra,56px)+4px)]">
         <h2 className="text-xl font-semibold mb-1 text-center">{T.pasosTitulo}</h2>
         <p className="text-gray-500 text-sm text-center mb-6">{T.pasosSubtitulo}</p>
         <div className="grid md:grid-cols-3 gap-4">
@@ -181,7 +196,7 @@ export default function App() {
       </section>
 
       {/* Video explicativo */}
-      <section id="video" className="bg-[#F7F5F1] border-y border-gray-200 scroll-mt-14">
+      <section id="video" className="bg-[#F7F5F1] border-y border-gray-200 scroll-mt-[calc(var(--alto-barra,56px)+4px)]">
         <div className="max-w-4xl mx-auto px-4 py-7">
           <h2 className="text-xl font-semibold mb-1 text-center">Mira cómo funciona en un minuto</h2>
           <p className="text-gray-500 text-sm text-center mb-4">Un recorrido real por la herramienta con un presupuesto de ejemplo: de subir el archivo al reporte en Excel.</p>
@@ -199,7 +214,7 @@ export default function App() {
       </section>
 
       {/* Caso de referencia: primera prueba concreta */}
-      <section id="caso-real" className="max-w-5xl mx-auto px-4 py-8 scroll-mt-14">
+      <section id="caso-real" className="max-w-5xl mx-auto px-4 py-8 scroll-mt-[calc(var(--alto-barra,56px)+4px)]">
         <div className="bg-gray-50 border border-gray-100 rounded-xl p-5 md:p-6">
           <p className="text-xs font-semibold uppercase tracking-wide text-obralyt-amber mb-1">{T.casoEtiqueta}</p>
           <h2 className="text-lg md:text-xl font-semibold mb-4 text-balance">{T.casoTitulo}</h2>
@@ -232,7 +247,7 @@ export default function App() {
       </section>
 
       {/* Qué obtendrás: captura real del resultado */}
-      <section id="vista-previa" className="bg-[#F7F5F1] border-y border-gray-200 scroll-mt-14">
+      <section id="vista-previa" className="bg-[#F7F5F1] border-y border-gray-200 scroll-mt-[calc(var(--alto-barra,56px)+4px)]">
         <div className="max-w-5xl mx-auto px-4 py-10">
           <h2 className="text-xl font-semibold mb-1 text-center">{T.vistaTitulo}</h2>
           <p className="text-gray-500 text-sm text-center mb-6 max-w-2xl mx-auto">{T.vistaSubtitulo}</p>
@@ -255,7 +270,7 @@ export default function App() {
       </section>
 
       {/* La herramienta */}
-      <section id="herramienta" className="bg-gray-50 border-t border-gray-100 scroll-mt-14">
+      <section id="herramienta" className="bg-gray-50 border-t border-gray-100 scroll-mt-[calc(var(--alto-barra,56px)+4px)]">
         <div className="max-w-5xl mx-auto px-4 py-10">
           <h2 className="text-xl font-semibold mb-2 text-center">{T.herramientaTitulo}</h2>
           <p className="text-gray-500 text-sm text-center mb-8 max-w-2xl mx-auto">{T.herramientaTexto}</p>
@@ -282,7 +297,7 @@ export default function App() {
       </section>
 
       {/* Qué es OBRALYT: información escaneable */}
-      <section id="que-es" className="max-w-5xl mx-auto px-4 py-10 scroll-mt-14">
+      <section id="que-es" className="max-w-5xl mx-auto px-4 py-10 scroll-mt-[calc(var(--alto-barra,56px)+4px)]">
         <h2 className="text-xl font-semibold mb-2 text-center">{T.quienesSomosTitulo}</h2>
         <p className="text-gray-600 text-sm text-center mb-6 max-w-2xl mx-auto">{T.problema}</p>
 
@@ -316,7 +331,7 @@ export default function App() {
       </section>
 
       {/* Preguntas frecuentes */}
-      <section id="preguntas" className="max-w-3xl mx-auto px-4 py-10 scroll-mt-14">
+      <section id="preguntas" className="max-w-3xl mx-auto px-4 py-10 scroll-mt-[calc(var(--alto-barra,56px)+4px)]">
         <h2 className="text-xl font-semibold mb-4 text-center">{T.faqTitulo}</h2>
         <div className="divide-y divide-gray-200 border-y border-gray-200">
           {T.faq.map((f) => (
