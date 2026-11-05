@@ -204,7 +204,7 @@ export default function App() {
             poster="/video/obralyt-como-funciona.jpg"
             onPlay={(e) => { if (!e.currentTarget.dataset.medido) { e.currentTarget.dataset.medido = "1"; registrarEvento("video_reproducido"); } }}
             onEnded={() => registrarEvento("video_completado")}>
-            <source src="/video/obralyt-como-funciona.mp4?v=audio3-faststart" type="video/mp4" />
+            <source src="/video/obralyt-como-funciona.mp4?v=voz-carlos-1" type="video/mp4" />
             Tu navegador no puede reproducir este video.
           </video>
           <p className="text-center mt-4">

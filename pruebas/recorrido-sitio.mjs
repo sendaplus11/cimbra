@@ -51,7 +51,7 @@ for (const [desde, hacia] of REDIRECCIONES) {
   if (![301, 302].includes(r.status()) || !loc.endsWith(hacia)) fallo("Redirección " + desde, r.status() + " " + loc);
   else bien("Redirección " + desde + " → " + hacia);
 }
-for (const [ruta, tipo] of [["/", "text/html"], ["/robots.txt", "text/plain"], ["/sitemap.xml", "xml"], ["/og-image.png", "image/png"], ["/apple-touch-icon.png", "image/png"], ["/video/obralyt-como-funciona.jpg", "image/jpeg"], ["/video/obralyt-como-funciona.mp4?v=audio3-faststart", "video/mp4"]]) {
+for (const [ruta, tipo] of [["/", "text/html"], ["/robots.txt", "text/plain"], ["/sitemap.xml", "xml"], ["/og-image.png", "image/png"], ["/apple-touch-icon.png", "image/png"], ["/video/obralyt-como-funciona.jpg", "image/jpeg"], ["/video/obralyt-como-funciona.mp4?v=voz-carlos-1", "video/mp4"]]) {
   const r = await http.get(BASE + ruta);
   const ct = r.headers()["content-type"] || "";
   if (r.status() !== 200 || !ct.includes(tipo)) fallo("Archivo " + ruta, r.status() + " " + ct);
