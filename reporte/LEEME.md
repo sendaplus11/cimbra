@@ -5,6 +5,9 @@ Worker aparte del sitio (las Pages Functions no tienen tareas programadas). Env�
 - **Diario** a las 8:05 a. m. (Miami): visitas, cargas de presupuesto, análisis completados, contactos, canales y empresas de prospección del día anterior.
 - **Semanal** los lunes: lo mismo para los últimos 7 días.
 
+**Estado:** publicado y funcionando desde el 19-oct-2026 (base D1 `obralyt`, ya anotada en `wrangler.toml`). No hace falta volver a instalarlo.
+Los horarios están en UTC: después del cambio de hora de noviembre, el diario llega a las 7:05 a. m. de Miami.
+
 ## Instalación (una sola vez, ~10 minutos)
 
 1. **Email Routing de obralyt.com** (Cloudflare → obralyt.com → Email → Email Routing): activarlo y verificar como destino `obralyt.soporte@gmail.com` (llega un correo de confirmación).

@@ -10,8 +10,8 @@ crons = ["5 12 * * *", "10 12 * * 1"]
 
 [[d1_databases]]
 binding = "DB"
-database_name = "PONER_NOMBRE_DE_LA_BASE"   # el mismo nombre de la base D1 enlazada al sitio (binding DB)
-database_id = "PONER_ID_DE_LA_BASE"         # Cloudflare → Storage & Databases → D1 → la base → Database ID
+database_name = "obralyt"   # base D1 enlazada al sitio (binding DB)
+database_id = "8c9fad54-afbb-4259-a1e9-0071a40494b8"
 
 # Envío con Cloudflare Email Routing (gratis). El destino debe estar verificado en Email Routing de obralyt.com.
 [[send_email]]

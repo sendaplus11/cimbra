@@ -26,7 +26,9 @@ const ok = [];
 const fallo = (que, detalle) => problemas.push(que + (detalle ? " → " + detalle : ""));
 const bien = (que) => { ok.push(que); if (process.env.DETALLE) console.log("✓ " + que); };
 
-const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || "/opt/pw-browsers/chromium" });
+// Detrás de un proxy (HTTPS_PROXY), Chromium debe usarlo explícitamente para salir a internet.
+const proxy = process.env.HTTPS_PROXY && !LOCAL ? { server: process.env.HTTPS_PROXY, bypass: "localhost,127.0.0.1" } : undefined;
+const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || "/opt/pw-browsers/chromium", proxy });
 
 // ---------------------------------------------------------------- 1. redirecciones y archivos públicos
 const ctxHttp = await browser.newContext({ userAgent: UA });
@@ -72,7 +74,9 @@ for (const vista of [{ nombre: "computador", viewport: { width: 1366, height: 90
   const eventos = [];
   const fallidas = [];
   p.on("pageerror", (e) => errores.push(e.message));
-  p.on("console", (m) => { if (m.type() === "error") errores.push(m.text()); });
+  // Un recurso externo que no carga (p. ej. el beacon de Cloudflare Web Analytics bloqueado por la red
+  // de pruebas) no es un error del sitio.
+  p.on("console", (m) => { if (m.type() === "error" && !(/Failed to load resource/.test(m.text()) && !(m.location().url || "").startsWith(BASE))) errores.push(m.text()); });
   p.on("requestfailed", (r) => { if (r.url().startsWith(BASE) && !/\/api\/evento|\.mp4/.test(r.url()) && !/ERR_ABORTED/.test((r.failure() || {}).errorText)) fallidas.push(r.url() + " " + (r.failure() || {}).errorText); });
   p.on("response", (r) => { if (r.status() >= 400 && r.url().startsWith(BASE)) fallidas.push(r.status() + " " + r.url()); });
   // Mediciones: se leen del cuerpo de cada envío a /api/evento (fetch o sendBeacon).
