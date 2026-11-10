@@ -88,7 +88,12 @@ function normalizar(t) {
 
 function encabezado(s, maxFallback = 55) {
   const str = String(s || "").trim();
-  const corte = str.indexOf(".");
+  // Corta en el primer punto que cierra una frase (seguido de espacio o al final), no en un decimal:
+  // «MURO … E = 0.15 M.» queda «MURO … E = 0.15 M» y no «MURO … E = 0».
+  const re = /\.(?=\s|$)/g;
+  let m;
+  while ((m = re.exec(str)) && m.index <= 5) { /* sigue buscando */ }
+  const corte = m ? m.index : -1;
   if (corte > 5 && corte < 120) return str.slice(0, corte);
   return truncar(str, maxFallback);
 }
