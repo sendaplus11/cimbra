@@ -180,7 +180,7 @@ export const LANDING = {
     },
     {
       p: "¿Qué incluye el reporte en Excel?",
-      r: "Una hoja de resumen con el reporte ejecutivo y un gráfico de las partidas de mayor peso, la lista completa de Cost Drivers, ordenada por peso, con la línea que marca hasta dónde llega tu revisión, el cronograma de obra con su diagrama de Gantt (editable: al cambiar una duración, las demás fases se desplazan), el flujo de caja semanal, mensual y anual con sus gráficos, la curva de avance financiero y las prioridades de procura. Los gráficos vienen dentro del archivo, listos para anexar a tu oferta.",
+      r: "Una hoja de resumen con el reporte ejecutivo y un gráfico de las partidas de mayor peso, la lista completa de Cost Drivers, ordenada por peso, con la línea que marca hasta dónde llega tu revisión, el cronograma de obra con su diagrama de Gantt, armado con la secuencia constructiva típica (las instalaciones en paralelo con la obra gris y los acabados al cierre) y editable, un diagrama de Gantt semanal en celdas, el flujo de caja semanal, mensual y anual con sus gráficos, el flujo de caja por fase semana a semana y mes a mes, la curva de avance financiero semanal, el financiamiento de la obra (capital de trabajo según el anticipo y el pago de actas del pliego) y las prioridades de procura. Los gráficos vienen dentro del archivo, listos para anexar a tu oferta.",
     },
     {
       p: "¿Cómo se calcula el flujo de caja?",
