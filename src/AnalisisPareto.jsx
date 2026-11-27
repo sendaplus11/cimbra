@@ -3,6 +3,7 @@ import { ComposedChart, BarChart, Bar, Cell, Line, XAxis, YAxis, CartesianGrid, 
 import * as XLSX from "xlsx-js-style";
 import { MODULOS as M } from "./textos.js";
 import { ganttXML, barrasYLineaXML, lineaXML, agregarGraficos } from "./excelGraficos.js";
+import { hojaFlujoPorFase, hojaGanttSemanal } from "./excelExtras.js";
 import { FILAS_EJEMPLO } from "./ejemploPresupuesto.js";
 import { registrarEvento } from "./medicion.js";
 import { leerPresupuesto } from "./lectorPresupuesto.js";
@@ -686,7 +687,7 @@ export default function AnalisisPareto() {
     const wb = XLSX.utils.book_new();
     const graficos = [];
     // Hojas largas en las que conviene dejar fijo el encabezado al desplazarse.
-    const hojasCongeladas = [M.costDrivers, M.cronograma, M.procura];
+    const hojasCongeladas = [M.costDrivers, M.cronograma, M.procura, "Gantt Semanal", "Flujo Semanal por Fase", "Flujo Mensual por Fase"];
 
     // --- Hoja 1: Resumen (con el gráfico de las partidas de mayor peso) ---
     const filasResumen = [];
@@ -878,6 +879,10 @@ export default function AnalisisPareto() {
         });
       }
 
+      // Diagrama de Gantt semanal en celdas, a partir del mismo cronograma.
+      const horizonteObra = Math.max(plazoTotal || 0, finDeObra);
+      XLSX.utils.book_append_sheet(wb, hojaGanttSemanal(XLSX, { cronograma, horizonte: horizonteObra }), "Gantt Semanal");
+
       const flujoSemanal = calcularFlujo(7, "Semana");
       const flujoMensual = calcularFlujo(30, "Mes");
       const flujoAnual = calcularFlujo(365, "Año");
@@ -907,21 +912,41 @@ export default function AnalisisPareto() {
         }
       });
 
-      const curva = flujoMensual.map((f) => [f.periodo, f.pctAcum / 100]);
+      // Flujo de caja por fase: cuadro en Excel con lo que exige cada fase en cada semana y en cada mes.
+      [
+        ["Flujo Semanal por Fase", 7, "Semana"],
+        ["Flujo Mensual por Fase", 30, "Mes"],
+      ].forEach(([nombreHoja, dias, etiqueta]) => {
+        XLSX.utils.book_append_sheet(
+          wb,
+          hojaFlujoPorFase(XLSX, { cronograma, periodDias: dias, etiqueta, horizonte: horizonteObra, total, fmtMonto: FMT_MONTO }),
+          nombreHoja
+        );
+      });
+
+      // Curva de avance semanal (con la mensual al lado para leerla por meses).
+      const nCurva = Math.max(flujoSemanal.length, flujoMensual.length);
+      const curva = Array.from({ length: nCurva }, (_, i) => [
+        flujoSemanal[i] ? flujoSemanal[i].periodo : "",
+        flujoSemanal[i] ? flujoSemanal[i].pctAcum / 100 : "",
+        "",
+        flujoMensual[i] ? flujoMensual[i].periodo : "",
+        flujoMensual[i] ? flujoMensual[i].pctAcum / 100 : "",
+      ]);
       XLSX.utils.book_append_sheet(
         wb,
-        hojaTabla(["Periodo (mensual)", "% Avance financiero acumulado"], curva, [18, 30], { 1: FMT_PCT }),
+        hojaTabla(["Periodo (semanal)", "% Avance acumulado (semanal)", "", "Periodo (mensual)", "% Avance acumulado (mensual)"], curva, [16, 26, 3, 16, 26], { 1: FMT_PCT, 4: FMT_PCT }),
         "Curva de Avance"
       );
-      if (curva.length >= 2) {
+      if (flujoSemanal.length >= 2) {
         graficos.push({
           hoja: "Curva de Avance",
           xml: lineaXML({
             hoja: "Curva de Avance", colCat: "A", colLinea: "B",
-            fila1: 2, filaN: curva.length + 1,
-            titulo: "Curva de avance financiero acumulado", tituloEjeIzq: "% del presupuesto ejecutado",
+            fila1: 2, filaN: flujoSemanal.length + 1,
+            titulo: "Curva de avance financiero acumulado (semanal)", tituloEjeIzq: "% del presupuesto ejecutado",
           }),
-          col1: 3, fila1: 0, col2: 15, fila2: 22,
+          col1: 6, fila1: 0, col2: 19, fila2: 24,
         });
       }
     }
