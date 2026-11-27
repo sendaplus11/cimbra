@@ -49,3 +49,10 @@ test("las instalaciones quedan en paralelo con la obra gris", () => {
   assert.ok(v[3].ini < v[2].fin && v[3].ini < v[1].fin);
   assert.equal(ventanasConstructivas([{ name: "Partida A", monto: 1 }, { name: "Partida B", monto: 1 }]), null);
 });
+
+test("capítulos compuestos del presupuesto de Villagómez", () => {
+  assert.equal(etapaDe("2 DEMOLICIONES RETIROS Y CERRAMIENTOS").fin, 0.1);
+  assert.equal(etapaDe("14 APARATOS SANITARIOS").etapa, "Aparatos y equipos");
+  assert.equal(etapaDe("22 CIELO RASOS - ACABADOS").etapa, "Cielos rasos");
+  assert.deepEqual([etapaDe("10 INSTALACIONES HIDRAULICAS SANITARIAS Y APARATOS").ini, etapaDe("10 INSTALACIONES HIDRAULICAS SANITARIAS Y APARATOS").fin], [0.2, 1]);
+});

@@ -42,19 +42,29 @@ function primeraEtapa(t) {
   return mejor;
 }
 
-// Un capítulo que nombra dos trabajos («Cimentación y estructura», «Pisos y acabados») ocupa la
-// ventana de ambos. Solo cuenta lo que va antes de una preposición: en «Andén en concreto» o
-// «Excavación para zapatas», lo que sigue es un detalle, no otro trabajo.
+// Un capítulo que nombra dos trabajos unidos por «y», coma o guion («Cimentación y estructura»,
+// «Instalaciones hidráulicas sanitarias y aparatos») ocupa la ventana de ambos, siempre que esas
+// ventanas se toquen en la obra. Solo cuenta lo que va antes de una preposición: en «Andén en
+// concreto» o «Excavación para zapatas», lo que sigue es un detalle, no otro trabajo. «Acabados»
+// a secas es genérico: junto a un trabajo concreto («Cielo rasos - acabados») no cambia nada.
 export function etapaDe(nombre) {
-  const t = " " + sinAcentos(nombre).replace(/[^a-z0-9ñ]+/g, " ") + " ";
+  const t = " " + sinAcentos(nombre).replace(/[–—]/g, "-") + " ";
   const corte = t.search(/ (en|de|del|para|con|sobre|tipo|segun|incluye) /);
   const cabeza = corte > 0 ? t.slice(0, corte + 1) : t;
-  const enCabeza = ETAPAS.filter((e) => e.claves.some((k) => cabeza.includes(" " + sinAcentos(k))));
-  if (enCabeza.length > 1) {
-    const principal = primeraEtapa(cabeza);
-    return { ...principal, ini: Math.min(...enCabeza.map((e) => e.ini)), fin: Math.max(...enCabeza.map((e) => e.fin)) };
+  const limpio = (x) => " " + x.replace(/[^a-z0-9ñ]+/g, " ").trim() + " ";
+  const segmentos = cabeza.split(/ y |,|;|\/| - |-/).map(limpio).filter((x) => x.trim());
+  const porSegmento = segmentos
+    .map((seg) => ({ e: primeraEtapa(seg), generico: /^ acabados? $/.test(seg) }))
+    .filter((x) => x.e);
+  const especificos = porSegmento.filter((x) => !x.generico);
+  const usados = (especificos.length ? especificos : porSegmento).map((x) => x.e);
+  if (!usados.length) return primeraEtapa(limpio(t));
+  const principal = usados[0];
+  let ini = principal.ini, fin = principal.fin;
+  for (const e of usados.slice(1)) {
+    if (e.ini <= fin + 0.05 && e.fin >= ini - 0.05) { ini = Math.min(ini, e.ini); fin = Math.max(fin, e.fin); }
   }
-  return enCabeza[0] || primeraEtapa(t);
+  return ini === principal.ini && fin === principal.fin ? principal : { ...principal, ini, fin };
 }
 
 // Devuelve, para cada fase (en el orden del presupuesto), su etapa y su ventana [ini, fin].
