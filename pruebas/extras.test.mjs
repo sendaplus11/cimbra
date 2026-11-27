@@ -32,3 +32,20 @@ test("las hojas por fase y el Gantt semanal se escriben sin errores", () => {
   const g = leido.Sheets["Gantt Semanal"];
   assert.equal(g["B3"].v, 4); // la estructura empieza en el día 21 → semana 4
 });
+
+import { etapaDe, ventanasConstructivas } from "../src/secuenciaConstructiva.js";
+
+test("la secuencia constructiva reconoce los capítulos típicos", () => {
+  assert.equal(etapaDe("INSTALACIONES HIDROSANITARIAS").etapa, "Instalaciones hidrosanitarias");
+  assert.equal(etapaDe("APARATOS SANITARIOS").etapa, "Aparatos y equipos");
+  assert.equal(etapaDe("Andén en concreto").etapa, "Obras exteriores");
+  const c = etapaDe("CAP. 3 CIMENTACIÓN Y ESTRCUTURA");
+  assert.deepEqual([c.ini, c.fin], [0.1, 0.6]);
+});
+
+test("las instalaciones quedan en paralelo con la obra gris", () => {
+  const fases = ["Preliminares", "Estructura", "Mampostería", "Instalaciones eléctricas", "Pintura"].map((name) => ({ name, monto: 100 }));
+  const v = ventanasConstructivas(fases);
+  assert.ok(v[3].ini < v[2].fin && v[3].ini < v[1].fin);
+  assert.equal(ventanasConstructivas([{ name: "Partida A", monto: 1 }, { name: "Partida B", monto: 1 }]), null);
+});

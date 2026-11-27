@@ -119,4 +119,60 @@ export function hojaGanttSemanal(XLSX, { cronograma, horizonte }) {
   return ws;
 }
 
+// Financiamiento de la obra: cuánto capital de trabajo pone el contratista mientras cobra las actas.
+// Los parámetros dependen del pliego (anticipo, rezago de pago de actas) y quedan editables en ámbar.
+// Egreso = inversión mensual de la obra; ingreso = acta del mes (m - rezago), menos la amortización
+// proporcional del anticipo; el anticipo entra en el mes 1.
+export function hojaFinanciamiento(XLSX, { inversionMensual, total, fmtMonto }) {
+  const n = inversionMensual.length;
+  const filasExtra = 3; // meses después del fin de obra para cobrar las últimas actas (rezago hasta 3)
+  const nFilas = n + filasExtra;
+  const ws = {};
+  const poner = (a, celda) => { ws[a] = celda; };
+  const ambar = { fill: { patternType: "solid", fgColor: { rgb: "FFF7E6" } }, font: { bold: true, color: { rgb: NAVY } }, border: bordes };
+  const etiqueta = { font: { name: "Arial", sz: 10 }, border: bordes };
+  poner("A1", { t: "s", v: "Financiamiento de la obra (ajusta los parámetros a las condiciones del pliego)", s: { font: { bold: true, sz: 12, color: { rgb: NAVY } } } });
+  poner("A3", { t: "s", v: "Anticipo (% del contrato)", s: etiqueta });
+  poner("B3", { t: "n", v: 0, z: "0%", s: ambar });
+  poner("A4", { t: "s", v: "Rezago de pago de actas (meses, 0 a 3)", s: etiqueta });
+  poner("B4", { t: "n", v: 1, z: "0", s: ambar });
+  poner("A5", { t: "s", v: "Valor del contrato", s: etiqueta });
+  poner("B5", { t: "n", v: Math.round(total), z: fmtMonto, s: etiqueta });
+  const enc = ["Mes", "Inversión de obra (egreso)", "Acta del mes", "Ingreso por actas", "Anticipo recibido", "Saldo del mes", "Saldo acumulado"];
+  const rEnc = 7; // fila 8 de Excel
+  enc.forEach((t, c) => { ws[XLSX.utils.encode_cell({ r: rEnc, c })] = { t: "s", v: t, s: ENCABEZADO }; });
+  const f1 = rEnc + 2, fN = rEnc + 1 + nFilas; // filas de Excel de la tabla
+  let acum = 0, minAcum = 0;
+  for (let i = 0; i < nFilas; i++) {
+    const r = f1 + i;
+    const inv = i < n ? inversionMensual[i] : 0;
+    const cobroPrevio = i - 1 >= 0 && i - 1 < n ? inversionMensual[i - 1] : 0; // valores iniciales con rezago 1
+    acum += cobroPrevio - inv;
+    minAcum = Math.min(minAcum, acum);
+    const m = { border: bordes };
+    poner("A" + r, { t: "n", v: i + 1, s: { ...m, alignment: { horizontal: "center" } } });
+    poner("B" + r, { t: "n", v: Math.round(inv), z: fmtMonto, s: m });
+    poner("C" + r, { t: "n", f: "B" + r, v: Math.round(inv), z: fmtMonto, s: m });
+    poner("D" + r, { t: "n", f: "IF(A" + r + "-INT($B$4)<1,0,INDEX($C$" + f1 + ":$C$" + fN + ",A" + r + "-INT($B$4)))*(1-$B$3)", v: Math.round(cobroPrevio), z: fmtMonto, s: m });
+    poner("E" + r, { t: "n", f: i === 0 ? "$B$3*$B$5" : "0", v: 0, z: fmtMonto, s: m });
+    poner("F" + r, { t: "n", f: "D" + r + "+E" + r + "-B" + r, v: Math.round(cobroPrevio - inv), z: fmtMonto, s: m });
+    poner("G" + r, { t: "n", f: i === 0 ? "F" + r : "G" + (r - 1) + "+F" + r, v: Math.round(acum), z: fmtMonto, s: { ...m, font: { bold: true } } });
+  }
+  const rRes = fN + 2;
+  poner("A" + rRes, { t: "s", v: "Capital de trabajo máximo que pone el contratista", s: TOTAL });
+  poner("B" + rRes, { t: "n", f: "MAX(0,-MIN(G" + f1 + ":G" + fN + "))", v: Math.round(-minAcum), z: fmtMonto, s: TOTAL });
+  poner("A" + (rRes + 1), { t: "s", v: "% del valor del contrato", s: TOTAL });
+  poner("B" + (rRes + 1), { t: "n", f: "IF($B$5=0,0,B" + rRes + "/$B$5)", v: total ? -minAcum / total : 0, z: "0.0%", s: TOTAL });
+  poner("A" + (rRes + 3), {
+    t: "s",
+    v: "La inversión mensual sale del Flujo de Caja (valor de la obra ejecutada cada mes). El acta de cada mes se cobra con el rezago indicado y descuenta la amortización proporcional del anticipo. Es una referencia conservadora: el egreso se toma al valor del presupuesto, sin separar la utilidad.",
+    s: { font: { italic: true, sz: 9, color: { rgb: "6B7680" } }, alignment: { wrapText: true, vertical: "top" } },
+  });
+  ws["!merges"] = [{ s: { r: rRes + 2, c: 0 }, e: { r: rRes + 2, c: 6 } }];
+  ws["!rows"] = []; ws["!rows"][rEnc] = { hpt: 30 }; ws["!rows"][rRes + 2] = { hpt: 42 };
+  ws["!ref"] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rRes + 2, c: 6 } });
+  ws["!cols"] = [{ wch: 44 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 20 }];
+  return { ws, filaInicio: f1, filaFin: fN };
+}
+
 export { AMBAR };

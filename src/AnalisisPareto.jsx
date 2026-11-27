@@ -3,7 +3,8 @@ import { ComposedChart, BarChart, Bar, Cell, Line, XAxis, YAxis, CartesianGrid, 
 import * as XLSX from "xlsx-js-style";
 import { MODULOS as M } from "./textos.js";
 import { ganttXML, barrasYLineaXML, lineaXML, agregarGraficos } from "./excelGraficos.js";
-import { hojaFlujoPorFase, hojaGanttSemanal } from "./excelExtras.js";
+import { hojaFlujoPorFase, hojaGanttSemanal, hojaFinanciamiento } from "./excelExtras.js";
+import { ventanasConstructivas } from "./secuenciaConstructiva.js";
 import { FILAS_EJEMPLO } from "./ejemploPresupuesto.js";
 import { registrarEvento } from "./medicion.js";
 import { leerPresupuesto } from "./lectorPresupuesto.js";
@@ -198,7 +199,9 @@ export default function AnalisisPareto() {
   const [moneda, setMoneda] = useState("");
   // Solape entre fases: % de la fase anterior que todavía queda por ejecutar cuando arranca la
   // siguiente. En obra las fases casi siempre se solapan, por eso el valor por defecto no es cero.
-  const [solape, setSolape] = useState(SOLAPE_POR_DEFECTO);
+  // null = automático: secuencia constructiva si se reconocen los capítulos, si no, solape por defecto.
+  // -1 = secuencia constructiva elegida a mano; 0, 15, 30, 50 = encadenamiento con ese solape.
+  const [solapeElegido, setSolape] = useState(null);
   // Cuando el archivo trae líneas de ajuste (variación de precios, imprevistos), el usuario elige si entran al análisis.
   const [excluirAjustes, setExcluirAjustes] = useState(false);
   // Avisos de lectura del archivo: partidas sin monto y total declarado en el propio archivo.
@@ -252,7 +255,7 @@ export default function AnalisisPareto() {
     const { sinMonto, totalArchivo, totalImportado } = res;
     setAvisos({ sinMonto, totalArchivo });
     setExcluirAjustes(false);
-    setSolape(SOLAPE_POR_DEFECTO);
+    setSolape(null);
     setMoneda(res.moneda);
     setPartidas(nuevas);
     setInicioManual({});
@@ -487,6 +490,12 @@ export default function AnalisisPareto() {
   // así se evitan fases de "0,3 semanas" que ningún profesional puede ejecutar.
   const nFases = fasesOrdenadas.length || 1;
   const minDias = plazoTotal ? Math.min(7, plazoTotal / nFases) : 1;
+  // Secuencia constructiva: cada fase en su ventana típica de obra (instalaciones en paralelo con
+  // la obra gris, acabados al cierre). Se usa si se reconoce el tipo de trabajo de la mayor parte
+  // del presupuesto; si no, o si el usuario elige un encadenamiento, las fases van en cadena.
+  const ventanas = ventanasConstructivas(fasesOrdenadas);
+  const modoConstructivo = ventanas !== null && (solapeElegido === null || solapeElegido === -1);
+  const solape = modoConstructivo ? 0 : (solapeElegido === null || solapeElegido === -1 ? SOLAPE_POR_DEFECTO : solapeElegido);
   const factorSolape = 1 - solape / 100;
   let huboMinimo = false;
   // Duración proporcional al peso económico, con mínimo, y reescalada para que el conjunto
@@ -512,14 +521,15 @@ export default function AnalisisPareto() {
     const pct = total ? f.monto / total : 0;
     // Sin redondeos intermedios: redondear cada fase a días enteros (y exigir mínimo 1 día) hacía que,
     // con muchas fases, el cronograma se alargara muy por encima del plazo indicado.
-    const diasAuto = duracionesBase[i] * escala;
+    const v = modoConstructivo ? ventanas[i] : null;
+    const diasAuto = v ? Math.max(minDias, (v.fin - v.ini) * (plazoTotal || 0)) : duracionesBase[i] * escala;
     const esManualDuracion = duracionManual[f.key] !== undefined;
     const dias = esManualDuracion ? Math.max(1, duracionManual[f.key]) : diasAuto;
-    const inicioAuto = cursorDia;
+    const inicioAuto = v ? Math.min(v.ini * (plazoTotal || 0), Math.max(0, (plazoTotal || 0) - diasAuto)) : cursorDia;
     const esManualInicio = inicioManual[f.key] !== undefined;
     const inicio = esManualInicio ? inicioManual[f.key] : inicioAuto;
     cursorDia = inicio + dias * factorSolape;
-    return { ...f, pct, dias, diasAuto, inicio, inicioAuto, esManualInicio, esManualDuracion, fin: inicio + dias };
+    return { ...f, pct, dias, diasAuto, inicio, inicioAuto, esManualInicio, esManualDuracion, fin: inicio + dias, etapa: v ? v.etapa : null };
   });
   const finDeObra = cronograma.length ? Math.max(...cronograma.map((f) => f.fin)) : 0;
   const domainMax = Math.max(plazoTotal, ...cronograma.map((f) => f.fin), 1);
@@ -718,9 +728,11 @@ export default function AnalisisPareto() {
       "OBRALYT te dice DÓNDE mirar: las partidas de clase A concentran el mayor valor económico y merecen tu revisión primero. Tu software de estimación te permite decidir CÓMO cambiarlo. El criterio final sobre precios, alcance y compras es siempre del profesional.",
       "El total analizado es la suma de las partidas importadas: no incluye IVA ni otros montos que el archivo sume aparte." +
         (avisos.totalArchivo !== null ? " Coincide con el total indicado en el archivo de origen." : ""),
-      "El cronograma es una aproximación por fases proporcional al peso económico; no es un cronograma de ruta crítica (CPM): no incluye dependencias entre actividades.",
+      modoConstructivo
+        ? "El cronograma sigue la secuencia constructiva típica: cada fase se ubica en la ventana habitual de su tipo de trabajo dentro del plazo (las instalaciones corren en paralelo con la obra gris y los acabados cierran la obra). Es una aproximación, no un cronograma de ruta crítica (CPM)."
+        : "El cronograma es una aproximación por fases proporcional al peso económico; no es un cronograma de ruta crítica (CPM): no incluye dependencias entre actividades.",
     ];
-    if (huboMinimo && hayPlazo) parrafos.push("Las fases de menor peso recibieron una duración mínima para que el cronograma sea ejecutable; el conjunto se ajusta al plazo indicado.");
+    if (huboMinimo && hayPlazo && !modoConstructivo) parrafos.push("Las fases de menor peso recibieron una duración mínima para que el cronograma sea ejecutable; el conjunto se ajusta al plazo indicado.");
     if (solape > 0 && hayPlazo) parrafos.push("El cronograma se calculó con las fases solapadas: cada una arranca cuando la anterior lleva " + (100 - solape) + "% de avance.");
     if (fuentePlazo && fuentePlazo.tipo === "archivo") parrafos.push("El plazo de " + plazoTexto(plazoTotal) + " se tomó del propio archivo (" + fuentePlazo.detalle + ")." + (fuentePlazo.confianza === "alta" ? "" : " Proviene de una partida medida en tiempo: confirma que coincide con la duración real de la obra."));
     if (plazoEsProvisional) parrafos.push("El plazo de " + plazoTexto(plazoTotal) + " es provisional: el archivo no indica la duración de la obra. Escribe el plazo de tu proyecto en " + M.cronograma + " y vuelve a descargar el reporte para que el cronograma, el " + M.flujoCaja + " y las " + M.procura + " reflejen tus tiempos.");
@@ -842,7 +854,9 @@ export default function AnalisisPareto() {
       const factorTxt = String(Math.round(factorSolape * 1000) / 1000);
       filasCrono.forEach((filaCrono, i) => {
         const r = i + 2; // fila de Excel (1 es el encabezado)
-        if (i > 0) {
+        if (modoConstructivo) {
+          estilar(wsCrono, r - 1, 1, { fill: { patternType: "solid", fgColor: { rgb: "FFF7E6" } }, font: { color: { rgb: NAVY } } });
+        } else if (i > 0) {
           wsCrono[XLSX.utils.encode_cell({ r: r - 1, c: 1 })] = {
             t: "n", f: "B" + (r - 1) + "+C" + (r - 1) + "*" + factorTxt, v: filaCrono[1],
             s: { alignment: { horizontal: "right" } },
@@ -859,7 +873,7 @@ export default function AnalisisPareto() {
       const rFin = filasCrono.length + 2;
       wsCrono[XLSX.utils.encode_cell({ r: rFin, c: 0 })] = { t: "s", v: "Fin estimado de la obra (" + unidadAbrev + ")", s: { font: { bold: true, color: { rgb: NAVY } } } };
       wsCrono[XLSX.utils.encode_cell({ r: rFin, c: 3 })] = { t: "n", f: "MAX(D2:D" + (filasCrono.length + 1) + ")", v: aUnidadEd(Math.max(...cronograma.map((f) => f.fin))), s: { font: { bold: true }, alignment: { horizontal: "right" } } };
-      wsCrono[XLSX.utils.encode_cell({ r: rFin + 2, c: 0 })] = { t: "s", v: "Edita la columna «Duración» (celdas en ámbar) y el inicio de las fases siguientes, el fin de obra y el diagrama de Gantt se recalculan solos." + (solape > 0 ? " El cálculo mantiene el solape de " + solape + "% entre fases que indicaste." : ""), s: { font: { italic: true, sz: 10, color: { rgb: "6B7680" } }, alignment: { wrapText: true, vertical: "top" } } };
+      wsCrono[XLSX.utils.encode_cell({ r: rFin + 2, c: 0 })] = { t: "s", v: modoConstructivo ? "Cronograma por secuencia constructiva: cada fase está en la ventana típica de su tipo de trabajo. Edita su «Inicio» o su «Duración» (celdas en ámbar) y el fin de obra y el diagrama de Gantt se recalculan solos." : "Edita la columna «Duración» (celdas en ámbar) y el inicio de las fases siguientes, el fin de obra y el diagrama de Gantt se recalculan solos." + (solape > 0 ? " El cálculo mantiene el solape de " + solape + "% entre fases que indicaste." : ""), s: { font: { italic: true, sz: 10, color: { rgb: "6B7680" } }, alignment: { wrapText: true, vertical: "top" } } };
       wsCrono["!merges"] = [{ s: { r: rFin + 2, c: 0 }, e: { r: rFin + 2, c: 6 } }];
       wsCrono["!rows"] = wsCrono["!rows"] || [];
       wsCrono["!rows"][rFin + 2] = { hpt: 30 };
@@ -922,6 +936,21 @@ export default function AnalisisPareto() {
           hojaFlujoPorFase(XLSX, { cronograma, periodDias: dias, etiqueta, horizonte: horizonteObra, total, fmtMonto: FMT_MONTO }),
           nombreHoja
         );
+      });
+
+      // Financiamiento: capital de trabajo que exige la obra según anticipo y pago de actas del pliego.
+      const fin = hojaFinanciamiento(XLSX, { inversionMensual: flujoMensual.map((f) => f.monto), total, fmtMonto: FMT_MONTO });
+      XLSX.utils.book_append_sheet(wb, fin.ws, "Financiamiento de Obra");
+      graficos.push({
+        hoja: "Financiamiento de Obra",
+        xml: barrasYLineaXML({
+          hoja: "Financiamiento de Obra", colCat: "A", colBarra: "B", colLinea: "G",
+          fila1: fin.filaInicio, filaN: fin.filaFin, filaNombre: 8,
+          titulo: "Inversión mensual y saldo acumulado del contratista",
+          formatoBarra: "#,##0", tituloEjeIzq: "Inversión del mes", tituloEjeDer: "Saldo acumulado",
+          formatoDerecho: "#,##0", maximoDerecho: null, minimoDerecho: null,
+        }),
+        col1: 8, fila1: 1, col2: 20, fila2: 24,
       });
 
       // Curva de avance semanal (con la mensual al lado para leerla por meses).
@@ -1318,7 +1347,8 @@ export default function AnalisisPareto() {
         <div className="flex items-center justify-end gap-x-4 gap-y-2 mb-3 flex-wrap">
           <div className="flex items-center gap-2 max-w-full min-w-0">
             <label className="text-xs text-gray-500 shrink-0" title="Define en qué punto de una fase arranca la siguiente.">Encadenamiento</label>
-            <select className="border border-gray-200 rounded px-1 py-0.5 text-xs min-w-0 max-w-full" value={solape} onChange={(e) => setSolape(Number(e.target.value))}>
+            <select className="border border-gray-200 rounded px-1 py-0.5 text-xs min-w-0 max-w-full" value={modoConstructivo ? -1 : solape} onChange={(e) => setSolape(Number(e.target.value))}>
+              {ventanas !== null && <option value={-1}>Secuencia constructiva (fases en paralelo)</option>}
               <option value={0}>Cada fase empieza al terminar la anterior</option>
               <option value={15}>Empieza con la anterior al 85% (solape leve)</option>
               <option value={30}>Empieza con la anterior al 70% (solape moderado)</option>
@@ -1379,11 +1409,13 @@ export default function AnalisisPareto() {
         {plazoTotal !== null && plazoTotal > 0 && (
         <>
         <p className="text-xs text-gray-500 mb-3">
-          {huboMinimo ? "Las fases de menor peso reciben una duración mínima para que el cronograma sea ejecutable, y el conjunto se reajusta al plazo que indicaste. " : ""}
-          {solape > 0
+          {huboMinimo && !modoConstructivo ? "Las fases de menor peso reciben una duración mínima para que el cronograma sea ejecutable, y el conjunto se reajusta al plazo que indicaste. " : ""}
+          {modoConstructivo
+            ? "Las fases siguen la secuencia constructiva típica: cada una se ubica en la ventana habitual de su tipo de trabajo dentro del plazo. Las instalaciones corren en paralelo con la estructura y la mampostería, y los acabados, la carpintería y las obras exteriores cierran la obra. Puedes cambiar a un encadenamiento arriba. "
+            : solape > 0
             ? "Las fases se solapan: cada una arranca cuando la anterior lleva " + (100 - solape) + "% de avance, que es lo habitual en obra. El solape acorta el calendario, no la duración de cada fase. Puedes cambiarlo arriba. "
             : "Las fases van una detrás de otra, sin solape. En obra lo normal es que se solapen: cámbialo arriba si es tu caso. "}
-          La duración de cada fase se estima en proporción al peso de sus partidas dentro del presupuesto total, no a partir de rendimientos reales de cuadrilla. Si ya tienes fechas y duraciones reales de tu propio cronograma (en Primavera, Project o Excel), edita el inicio y la duración de cada fase abajo (en {unidadLabel}); el {M.flujoCaja} y las {M.procura} usarán esos valores en lugar de los calculados automáticamente.
+          {modoConstructivo ? "Las ventanas son típicas de obra, no rendimientos reales de cuadrilla." : "La duración de cada fase se estima en proporción al peso de sus partidas dentro del presupuesto total, no a partir de rendimientos reales de cuadrilla."} Si ya tienes fechas y duraciones reales de tu propio cronograma (en Primavera, Project o Excel), edita el inicio y la duración de cada fase abajo (en {unidadLabel}); el {M.flujoCaja} y las {M.procura} usarán esos valores en lugar de los calculados automáticamente.
         </p>
         {cronograma.length > 0 && (
           <>

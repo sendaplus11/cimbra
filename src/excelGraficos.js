@@ -55,10 +55,10 @@ function catAx(id, crossId, { borrado, tituloEje, invertido, tamano } = {}) {
   );
 }
 
-function valAx(id, crossId, { secundario, formato, tituloEje, maximo, posicion } = {}) {
+function valAx(id, crossId, { secundario, formato, tituloEje, maximo, minimo = 0, posicion } = {}) {
   return (
     "<c:valAx><c:axId val=\"" + id + '"/><c:scaling><c:orientation val="minMax"/>' +
-    (maximo !== undefined ? '<c:max val="' + maximo + '"/>' : "") + '<c:min val="0"/></c:scaling>' +
+    (maximo != null ? '<c:max val="' + maximo + '"/>' : "") + (minimo != null ? '<c:min val="' + minimo + '"/>' : "") + "</c:scaling>" +
     '<c:delete val="0"/><c:axPos val="' + (posicion || (secundario ? "r" : "l")) + '"/>' +
     (secundario ? "" : '<c:majorGridlines><c:spPr><a:ln><a:solidFill><a:srgbClr val="E5E7EB"/></a:solidFill></a:ln></c:spPr></c:majorGridlines>') +
     (tituloEje ? ejeTitulo(tituloEje, (posicion || (secundario ? "r" : "l")) !== "b") : "") +
@@ -104,7 +104,7 @@ export function ganttXML({ hoja, colCat, colInicio, colDuracion, fila1, filaN, f
 }
 
 // Barras (monto por periodo) + línea de % acumulado en el eje derecho.
-export function barrasYLineaXML({ hoja, colCat, colBarra, colLinea, fila1, filaN, filaNombre, titulo: t, formatoBarra, tituloEjeIzq, tituloEjeDer, maximoDerecho }) {
+export function barrasYLineaXML({ hoja, colCat, colBarra, colLinea, fila1, filaN, filaNombre, titulo: t, formatoBarra, tituloEjeIzq, tituloEjeDer, maximoDerecho, formatoDerecho, minimoDerecho }) {
   const cuerpo =
     titulo(t) +
     "<c:plotArea><c:layout/><c:barChart><c:barDir val=\"col\"/><c:grouping val=\"clustered\"/><c:varyColors val=\"0\"/>" +
@@ -116,7 +116,7 @@ export function barrasYLineaXML({ hoja, colCat, colBarra, colLinea, fila1, filaN
     catAx("911111111", "922222222", { tamano: 7 }) +
     valAx("922222222", "911111111", { formato: formatoBarra || "#,##0", tituloEje: tituloEjeIzq }) +
     catAx("933333333", "944444444", { borrado: true }) +
-    valAx("944444444", "933333333", { secundario: true, formato: "0%", maximo: maximoDerecho === undefined ? 1 : maximoDerecho, tituloEje: tituloEjeDer }) +
+    valAx("944444444", "933333333", { secundario: true, formato: formatoDerecho || "0%", maximo: maximoDerecho === undefined ? 1 : maximoDerecho, minimo: minimoDerecho, tituloEje: tituloEjeDer }) +
     "</c:plotArea>" + leyenda("b");
   return envoltura(cuerpo);
 }
